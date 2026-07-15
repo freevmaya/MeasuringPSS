@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="#F5F5F5">
+
+    <!-- Заголовок -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="ESP32-C3 BLE Клиент"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:padding="16dp"
+        android:background="#2196F3"
+        android:textColor="#FFFFFF"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Статус подключения -->
+    <TextView
+        android:id="@+id/tvStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="🔵 Ожидание"
+        android:textSize="16sp"
+        android:padding="12dp"
+        android:background="#E3F2FD"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Данные с датчиков -->
+    <TextView
+        android:id="@+id/tvWeight"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="⚖️ Вес: --"
+        android:textSize="18sp"
+        android:padding="12dp"
+        android:background="#FFFFFF"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:id="@+id/tvDistance"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="📏 Расстояние: --"
+        android:textSize="18sp"
+        android:padding="12dp"
+        android:background="#FFFFFF"
+        android:layout_marginBottom="8dp" />
+    <!-- Блок настроек -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Настройки"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:layout_marginTop="16dp"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
+
+        <EditText
+            android:id="@+id/etWeightCf"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="Коэф. веса"
+            android:inputType="numberDecimal"
+            android:maxLines="1"
+            android:text="1.0" />
+
+        <EditText
+            android:id="@+id/etDistanceAdd"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="Коррекция расст."
+            android:inputType="number"
+            android:maxLines="1"
+            android:text="0" />
+
+        <EditText
+            android:id="@+id/etWeightLimit"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="Предел веса"
+            android:inputType="numberDecimal"
+            android:maxLines="1"
+            android:text="100.0" />
+
+    </LinearLayout>
+
+    <!-- Новый TextView для предельных данных -->
+    <TextView
+        android:id="@+id/tvLimitData"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="100dp"
+        android:padding="8dp"
+        android:text="📋 Предельные данные:"
+        android:textSize="14sp"
+        android:background="#f0f0f0"
+        android:layout_marginTop="8dp" />
+
+    <!-- Сырые данные -->
+    <TextView
+        android:id="@+id/tvRawData"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="📨 Ожидание данных..."
+        android:textSize="14sp"
+        android:padding="12dp"
+        android:background="#FFF3E0"
+        android:layout_marginBottom="16dp"
+        android:minHeight="60dp" />
+
+    <!-- Кнопки управления -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:weightSum="3"
+        android:layout_marginTop="8dp">
+
+        <Button
+            android:id="@+id/btnScan"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🔍 Сканировать"
+            android:padding="12dp"
+            android:layout_marginEnd="8dp"
+            android:backgroundTint="#4CAF50" />
+
+        <Button
+            android:id="@+id/btnConnect"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🔗 Подключить"
+            android:padding="12dp"
+            android:enabled="false"
+            android:layout_marginEnd="8dp"
+            android:backgroundTint="#2196F3" />
+
+        <Button
+            android:id="@+id/btnDisconnect"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="⛔ Отключить"
+            android:padding="12dp"
+            android:enabled="false"
+            android:backgroundTint="#F44336" />
+    </LinearLayout>
+
+    <!-- Информация -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="📌 Инструкция:\n1. Нажмите 'Сканировать'\n2. Выберите устройство 'Measuring PSS'\n3. Нажмите 'Подключить'\n4. Данные появятся автоматически"
+        android:textSize="14sp"
+        android:padding="12dp"
+        android:background="#ECEFF1"
+        android:layout_marginTop="16dp" />
+
+</LinearLayout>
