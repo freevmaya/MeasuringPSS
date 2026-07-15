@@ -24,6 +24,7 @@ public class AppSettings {
     }
 
     public void setWeightCf(double weightCf) {
+        // Разрешаем любые значения, включая отрицательные
         this.weightCf = weightCf;
     }
 

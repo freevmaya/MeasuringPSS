@@ -20,6 +20,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -48,9 +49,15 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvWeight;
     private TextView tvDistance;
     private TextView tvRawData;
+    private TextView tvLimitData;
     private Button btnScan;
     private Button btnConnect;
     private Button btnDisconnect;
+
+    // Поля для настроек
+    private EditText etWeightCf;
+    private EditText etDistanceAdd;
+    private EditText etWeightLimit;
 
     private Gson gson = new Gson();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -60,6 +67,10 @@ public class MainActivity extends AppCompatActivity {
     private final StringBuilder jsonBuffer = new StringBuilder();
 
     private static final int REQUEST_PERMISSIONS = 1;
+
+    // Новые экземпляры классов
+    private AppSettings appSettings = new AppSettings();
+    private AppState appState = new AppState();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -71,9 +82,18 @@ public class MainActivity extends AppCompatActivity {
         tvWeight = findViewById(R.id.tvWeight);
         tvDistance = findViewById(R.id.tvDistance);
         tvRawData = findViewById(R.id.tvRawData);
+        tvLimitData = findViewById(R.id.tvLimitData);
         btnScan = findViewById(R.id.btnScan);
         btnConnect = findViewById(R.id.btnConnect);
         btnDisconnect = findViewById(R.id.btnDisconnect);
+
+        // Инициализация настроек
+        etWeightCf = findViewById(R.id.etWeightCf);
+        etDistanceAdd = findViewById(R.id.etDistanceAdd);
+        etWeightLimit = findViewById(R.id.etWeightLimit);
+
+        // Применение настроек по умолчанию
+        applySettings();
 
         // Инициализация Bluetooth
         BluetoothManager bluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
@@ -102,6 +122,49 @@ public class MainActivity extends AppCompatActivity {
 
         // Обновляем состояние кнопок
         updateUI(false);
+
+        // Устанавливаем начальный статус
+        tvStatus.setText("⏳ Ожидание превышения веса...");
+    }
+
+    // Применение настроек из полей ввода
+    private void applySettings() {
+        try {
+            String cfStr = etWeightCf.getText().toString().trim();
+            if (!cfStr.isEmpty()) {
+                // Парсим значение, поддерживая отрицательные числа
+                appSettings.setWeightCf(Double.parseDouble(cfStr));
+            } else {
+                appSettings.setWeightCf(AppSettings.DEFAULT_WEIGHT_CF);
+            }
+
+            String addStr = etDistanceAdd.getText().toString().trim();
+            if (!addStr.isEmpty()) {
+                appSettings.setDistanceAdd(Integer.parseInt(addStr));
+            } else {
+                appSettings.setDistanceAdd(AppSettings.DEFAULT_DISTANCE_ADD);
+            }
+
+            String limitStr = etWeightLimit.getText().toString().trim();
+            if (!limitStr.isEmpty()) {
+                appSettings.setWeightLimit(Double.parseDouble(limitStr));
+            } else {
+                appSettings.setWeightLimit(AppSettings.DEFAULT_WEIGHT_LIMIT);
+            }
+        } catch (NumberFormatException e) {
+            e.printStackTrace();
+            Toast.makeText(this, "Неверный формат настроек. Используются значения по умолчанию.", Toast.LENGTH_SHORT).show();
+            resetSettingsToDefault();
+        }
+    }
+
+    private void resetSettingsToDefault() {
+        appSettings.setWeightCf(AppSettings.DEFAULT_WEIGHT_CF);
+        appSettings.setDistanceAdd(AppSettings.DEFAULT_DISTANCE_ADD);
+        appSettings.setWeightLimit(AppSettings.DEFAULT_WEIGHT_LIMIT);
+        etWeightCf.setText(String.valueOf(AppSettings.DEFAULT_WEIGHT_CF));
+        etDistanceAdd.setText(String.valueOf(AppSettings.DEFAULT_DISTANCE_ADD));
+        etWeightLimit.setText(String.valueOf(AppSettings.DEFAULT_WEIGHT_LIMIT));
     }
 
     private void checkPermissions() {
@@ -334,6 +397,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
+        @SuppressLint("MissingPermission")
         @Override
         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
             if (newState == BluetoothGatt.STATE_CONNECTED) {
@@ -342,6 +406,9 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     tvStatus.setText("✅ Подключено к " + currentDevice.getName());
                     updateUI(true);
+                    // Сбрасываем состояние при новом подключении
+                    appState.setState(AppState.State.EXPECT_DATA);
+                    tvStatus.setText("⏳ Ожидание превышения веса...");
                 });
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -417,8 +484,12 @@ public class MainActivity extends AppCompatActivity {
         /**
          * Обрабатывает буфер jsonBuffer, извлекая все полные JSON-объекты.
          * Если объект неполный (нет закрывающей скобки), он остается в буфере.
+         * Добавлена логика состояний, записи предельных данных и применения настроек.
          */
         private void processJsonBuffer() {
+            // Применяем настройки перед обработкой данных
+            applySettings();
+
             String buffer = jsonBuffer.toString();
             int startIndex = buffer.indexOf("{");
 
@@ -440,9 +511,55 @@ public class MainActivity extends AppCompatActivity {
                     // Парсим JSON
                     DataModel dataModel = gson.fromJson(fullJson, DataModel.class);
 
-                    // Обновляем UI
-                    tvWeight.setText(String.format("⚖️ Вес: %.2f г", dataModel.getWeight()));
-                    tvDistance.setText(String.format("📏 Расстояние: %d мм", dataModel.getDistance()));
+                    // Применяем коэффициент к весу (может быть отрицательным) и корректировку к расстоянию
+                    double correctedWeight = dataModel.getWeight() * appSettings.getWeightCf();
+                    int correctedDistance = dataModel.getDistance() + appSettings.getDistanceAdd();
+
+                    // Обновляем UI с откорректированными значениями
+                    tvWeight.setText(String.format("⚖️ Вес: %.2f г", correctedWeight));
+                    tvDistance.setText(String.format("📏 Расстояние: %d мм", correctedDistance));
+
+                    // --- Логика состояний и записи предельных данных ---
+                    double weightLimit = appSettings.getWeightLimit();
+
+                    if (appState.getCurrentState() == AppState.State.EXPECT_DATA) {
+                        // Состояние 1: Ожидаем превышения веса
+                        if (correctedWeight > weightLimit && !appState.isDataRecordedForCycle()) {
+                            // Вес превышен! Записываем данные.
+                            String timestamp = new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+                                    .format(new java.util.Date());
+                            String record = String.format("[%s] Вес: %.2f г, Расст: %d мм",
+                                    timestamp, correctedWeight, correctedDistance);
+
+                            // Добавляем в TextView с историей, переводя строку
+                            tvLimitData.append(record + "\n");
+
+                            // Отмечаем, что данные для этого цикла записаны
+                            dataModel.setRecorded(true);
+                            appState.setDataRecordedForCycle(true);
+
+                            // Переходим в состояние ожидания возврата веса
+                            appState.setState(AppState.State.EXPECT_RETURN);
+                            tvStatus.setText("⏳ Ожидание снижения веса...");
+
+                            // Прокручиваем TextView вниз, чтобы видеть последнюю запись
+                            final int scrollAmount = tvLimitData.getLayout() != null ?
+                                    tvLimitData.getLayout().getLineTop(tvLimitData.getLineCount()) - tvLimitData.getHeight() : 0;
+                            if (scrollAmount > 0) {
+                                tvLimitData.scrollTo(0, scrollAmount);
+                            } else {
+                                tvLimitData.scrollTo(0, 0);
+                            }
+                        }
+                    } else if (appState.getCurrentState() == AppState.State.EXPECT_RETURN) {
+                        // Состояние 2: Ожидаем возврата веса к значению меньше WeightLimit * 0.9
+                        double returnThreshold = weightLimit * 0.9;
+                        if (correctedWeight < returnThreshold) {
+                            // Вес вернулся к норме. Переходим обратно в состояние ожидания превышения.
+                            appState.setState(AppState.State.EXPECT_DATA);
+                            tvStatus.setText("⏳ Ожидание превышения веса...");
+                        }
+                    }
 
                 } catch (Exception e) {
                     tvWeight.setText("⚠️ Ошибка парсинга: " + e.getMessage());
@@ -469,6 +586,7 @@ public class MainActivity extends AppCompatActivity {
             tvWeight.setText("⚖️ Вес: --");
             tvDistance.setText("📏 Расстояние: --");
             tvRawData.setText("📨 Ожидание данных...");
+            // Не очищаем tvLimitData, чтобы сохранить историю
         }
     }
 

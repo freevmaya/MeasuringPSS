@@ -7,19 +7,6 @@
     android:padding="16dp"
     android:background="#F5F5F5">
 
-    <!-- Заголовок -->
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="ESP32-C3 BLE Клиент"
-        android:textSize="22sp"
-        android:textStyle="bold"
-        android:gravity="center"
-        android:padding="16dp"
-        android:background="#2196F3"
-        android:textColor="#FFFFFF"
-        android:layout_marginBottom="16dp" />
-
     <!-- Статус подключения -->
     <TextView
         android:id="@+id/tvStatus"
@@ -72,7 +59,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:hint="Коэф. веса"
-            android:inputType="numberDecimal"
+            android:inputType="numberSigned|numberDecimal"
             android:maxLines="1"
             android:text="1.0" />
 
@@ -103,12 +90,11 @@
         android:id="@+id/tvLimitData"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="#f0f0f0"
         android:minHeight="100dp"
         android:padding="8dp"
-        android:text="📋 Предельные данные:"
-        android:textSize="14sp"
-        android:background="#f0f0f0"
-        android:layout_marginTop="8dp" />
+        android:textSize="14sp" />
 
     <!-- Сырые данные -->
     <TextView
