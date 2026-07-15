@@ -14,13 +14,13 @@ import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanResult;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -53,11 +53,7 @@ public class MainActivity extends AppCompatActivity {
     private Button btnScan;
     private Button btnConnect;
     private Button btnDisconnect;
-
-    // Поля для настроек
-    private EditText etWeightCf;
-    private EditText etDistanceAdd;
-    private EditText etWeightLimit;
+    private Button btnSettings;
 
     private Gson gson = new Gson();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -68,14 +64,17 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int REQUEST_PERMISSIONS = 1;
 
-    // Новые экземпляры классов
-    private AppSettings appSettings = new AppSettings();
+    // Экземпляры классов
+    private AppSettings appSettings;
     private AppState appState = new AppState();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // Инициализация настроек
+        appSettings = new AppSettings(this);
 
         // Инициализация UI
         tvStatus = findViewById(R.id.tvStatus);
@@ -86,14 +85,10 @@ public class MainActivity extends AppCompatActivity {
         btnScan = findViewById(R.id.btnScan);
         btnConnect = findViewById(R.id.btnConnect);
         btnDisconnect = findViewById(R.id.btnDisconnect);
+        btnSettings = findViewById(R.id.btnSettings);
 
-        // Инициализация настроек
-        etWeightCf = findViewById(R.id.etWeightCf);
-        etDistanceAdd = findViewById(R.id.etDistanceAdd);
-        etWeightLimit = findViewById(R.id.etWeightLimit);
-
-        // Применение настроек по умолчанию
-        applySettings();
+        // Применение настроек
+        updateUIFromSettings();
 
         // Инициализация Bluetooth
         BluetoothManager bluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
@@ -119,52 +114,39 @@ public class MainActivity extends AppCompatActivity {
         btnScan.setOnClickListener(v -> startScan());
         btnConnect.setOnClickListener(v -> connectToDevice());
         btnDisconnect.setOnClickListener(v -> disconnectDevice());
+        btnSettings.setOnClickListener(v -> openSettings());
 
         // Обновляем состояние кнопок
         updateUI(false);
 
         // Устанавливаем начальный статус
         tvStatus.setText("⏳ Ожидание превышения веса...");
+
+        // Устанавливаем текст по умолчанию для tvLimitData
+        tvLimitData.setText("📋 Предельные данные:");
     }
 
-    // Применение настроек из полей ввода
-    private void applySettings() {
-        try {
-            String cfStr = etWeightCf.getText().toString().trim();
-            if (!cfStr.isEmpty()) {
-                // Парсим значение, поддерживая отрицательные числа
-                appSettings.setWeightCf(Double.parseDouble(cfStr));
-            } else {
-                appSettings.setWeightCf(AppSettings.DEFAULT_WEIGHT_CF);
-            }
-
-            String addStr = etDistanceAdd.getText().toString().trim();
-            if (!addStr.isEmpty()) {
-                appSettings.setDistanceAdd(Integer.parseInt(addStr));
-            } else {
-                appSettings.setDistanceAdd(AppSettings.DEFAULT_DISTANCE_ADD);
-            }
-
-            String limitStr = etWeightLimit.getText().toString().trim();
-            if (!limitStr.isEmpty()) {
-                appSettings.setWeightLimit(Double.parseDouble(limitStr));
-            } else {
-                appSettings.setWeightLimit(AppSettings.DEFAULT_WEIGHT_LIMIT);
-            }
-        } catch (NumberFormatException e) {
-            e.printStackTrace();
-            Toast.makeText(this, "Неверный формат настроек. Используются значения по умолчанию.", Toast.LENGTH_SHORT).show();
-            resetSettingsToDefault();
-        }
+    private void openSettings() {
+        Intent intent = new Intent(this, SettingsActivity.class);
+        startActivity(intent);
     }
 
-    private void resetSettingsToDefault() {
-        appSettings.setWeightCf(AppSettings.DEFAULT_WEIGHT_CF);
-        appSettings.setDistanceAdd(AppSettings.DEFAULT_DISTANCE_ADD);
-        appSettings.setWeightLimit(AppSettings.DEFAULT_WEIGHT_LIMIT);
-        etWeightCf.setText(String.valueOf(AppSettings.DEFAULT_WEIGHT_CF));
-        etDistanceAdd.setText(String.valueOf(AppSettings.DEFAULT_DISTANCE_ADD));
-        etWeightLimit.setText(String.valueOf(AppSettings.DEFAULT_WEIGHT_LIMIT));
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Обновляем UI при возврате из настроек
+        updateUIFromSettings();
+    }
+
+    private void updateUIFromSettings() {
+        // Обновляем отображение текущих настроек
+        double weightCf = appSettings.getWeightCf();
+        int distanceAdd = appSettings.getDistanceAdd();
+        double weightLimit = appSettings.getWeightLimit();
+
+        // Обновляем статус с текущими настройками
+        tvStatus.setText(String.format("⚙️ Коэф: %.2f, Корр: %d, Предел: %.1f",
+                weightCf, distanceAdd, weightLimit));
     }
 
     private void checkPermissions() {
@@ -472,11 +454,6 @@ public class MainActivity extends AppCompatActivity {
 
                     // Обрабатываем буфер в цикле, чтобы извлечь все возможные JSON-объекты
                     processJsonBuffer();
-
-                    // Если в буфере остались данные, показываем их как "неполный JSON"
-                    if (jsonBuffer.length() > 0) {
-                        tvRawData.setText("📨 Буфер: " + jsonBuffer.toString());
-                    }
                 });
             }
         }
@@ -487,9 +464,6 @@ public class MainActivity extends AppCompatActivity {
          * Добавлена логика состояний, записи предельных данных и применения настроек.
          */
         private void processJsonBuffer() {
-            // Применяем настройки перед обработкой данных
-            applySettings();
-
             String buffer = jsonBuffer.toString();
             int startIndex = buffer.indexOf("{");
 
@@ -511,17 +485,20 @@ public class MainActivity extends AppCompatActivity {
                     // Парсим JSON
                     DataModel dataModel = gson.fromJson(fullJson, DataModel.class);
 
+                    // Получаем настройки из SharedPreferences
+                    double weightCf = appSettings.getWeightCf();
+                    int distanceAdd = appSettings.getDistanceAdd();
+                    double weightLimit = appSettings.getWeightLimit();
+
                     // Применяем коэффициент к весу (может быть отрицательным) и корректировку к расстоянию
-                    double correctedWeight = dataModel.getWeight() * appSettings.getWeightCf();
-                    int correctedDistance = dataModel.getDistance() + appSettings.getDistanceAdd();
+                    double correctedWeight = dataModel.getWeight() * weightCf;
+                    int correctedDistance = dataModel.getDistance() + distanceAdd;
 
                     // Обновляем UI с откорректированными значениями
                     tvWeight.setText(String.format("⚖️ Вес: %.2f г", correctedWeight));
                     tvDistance.setText(String.format("📏 Расстояние: %d мм", correctedDistance));
 
                     // --- Логика состояний и записи предельных данных ---
-                    double weightLimit = appSettings.getWeightLimit();
-
                     if (appState.getCurrentState() == AppState.State.EXPECT_DATA) {
                         // Состояние 1: Ожидаем превышения веса
                         if (correctedWeight > weightLimit && !appState.isDataRecordedForCycle()) {
@@ -532,7 +509,12 @@ public class MainActivity extends AppCompatActivity {
                                     timestamp, correctedWeight, correctedDistance);
 
                             // Добавляем в TextView с историей, переводя строку
-                            tvLimitData.append(record + "\n");
+                            String currentText = tvLimitData.getText().toString();
+                            if (currentText.equals("📋 Предельные данные:")) {
+                                tvLimitData.setText(record);
+                            } else {
+                                tvLimitData.append("\n" + record);
+                            }
 
                             // Отмечаем, что данные для этого цикла записаны
                             dataModel.setRecorded(true);
@@ -541,15 +523,6 @@ public class MainActivity extends AppCompatActivity {
                             // Переходим в состояние ожидания возврата веса
                             appState.setState(AppState.State.EXPECT_RETURN);
                             tvStatus.setText("⏳ Ожидание снижения веса...");
-
-                            // Прокручиваем TextView вниз, чтобы видеть последнюю запись
-                            final int scrollAmount = tvLimitData.getLayout() != null ?
-                                    tvLimitData.getLayout().getLineTop(tvLimitData.getLineCount()) - tvLimitData.getHeight() : 0;
-                            if (scrollAmount > 0) {
-                                tvLimitData.scrollTo(0, scrollAmount);
-                            } else {
-                                tvLimitData.scrollTo(0, 0);
-                            }
                         }
                     } else if (appState.getCurrentState() == AppState.State.EXPECT_RETURN) {
                         // Состояние 2: Ожидаем возврата веса к значению меньше WeightLimit * 0.9
@@ -574,6 +547,11 @@ public class MainActivity extends AppCompatActivity {
             // Обновляем буфер, оставляя только необработанные данные
             jsonBuffer.setLength(0);
             jsonBuffer.append(buffer);
+
+            // Если в буфере остались данные, показываем их как "неполный JSON"
+            if (jsonBuffer.length() > 0) {
+                tvRawData.setText("📨 Буфер: " + jsonBuffer.toString());
+            }
         }
     };
 

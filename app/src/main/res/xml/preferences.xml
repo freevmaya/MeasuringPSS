@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <EditTextPreference
+        android:key="weight_cf"
+        android:title="Коэффициент веса"
+        android:summary="Коэффициент для коррекции веса"
+        android:defaultValue="1.0"
+        android:inputType="numberSigned|numberDecimal" />
+
+    <EditTextPreference
+        android:key="distance_add"
+        android:title="Коррекция расстояния"
+        android:summary="Добавляемое значение к расстоянию"
+        android:defaultValue="0"
+        android:inputType="number" />
+
+    <EditTextPreference
+        android:key="weight_limit"
+        android:title="Предел веса"
+        android:summary="Пороговое значение веса для срабатывания"
+        android:defaultValue="100.0"
+        android:inputType="numberDecimal" />
+
+</PreferenceScreen>

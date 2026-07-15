@@ -1,46 +1,62 @@
 package vmaya.para.measuringpss;
 
+import android.content.Context;
+import android.content.SharedPreferences;
+import androidx.preference.PreferenceManager;
+
 public class AppSettings {
-    // Константы для значений по умолчанию
+    // Константы для ключей настроек
+    public static final String KEY_WEIGHT_CF = "weight_cf";
+    public static final String KEY_DISTANCE_ADD = "distance_add";
+    public static final String KEY_WEIGHT_LIMIT = "weight_limit";
+
+    // Значения по умолчанию
     public static final double DEFAULT_WEIGHT_CF = 1.0;
     public static final int DEFAULT_DISTANCE_ADD = 0;
     public static final double DEFAULT_WEIGHT_LIMIT = 100.0;
 
-    // Поля настроек
-    private double weightCf;
-    private int distanceAdd;
-    private double weightLimit;
+    private final SharedPreferences sharedPreferences;
 
-    public AppSettings() {
-        // Установка значений по умолчанию
-        this.weightCf = DEFAULT_WEIGHT_CF;
-        this.distanceAdd = DEFAULT_DISTANCE_ADD;
-        this.weightLimit = DEFAULT_WEIGHT_LIMIT;
+    public AppSettings(Context context) {
+        this.sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context);
     }
 
-    // Геттеры и сеттеры
     public double getWeightCf() {
-        return weightCf;
+        String value = sharedPreferences.getString(KEY_WEIGHT_CF, String.valueOf(DEFAULT_WEIGHT_CF));
+        try {
+            return Double.parseDouble(value);
+        } catch (NumberFormatException e) {
+            return DEFAULT_WEIGHT_CF;
+        }
     }
 
     public void setWeightCf(double weightCf) {
-        // Разрешаем любые значения, включая отрицательные
-        this.weightCf = weightCf;
+        sharedPreferences.edit().putString(KEY_WEIGHT_CF, String.valueOf(weightCf)).apply();
     }
 
     public int getDistanceAdd() {
-        return distanceAdd;
+        String value = sharedPreferences.getString(KEY_DISTANCE_ADD, String.valueOf(DEFAULT_DISTANCE_ADD));
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return DEFAULT_DISTANCE_ADD;
+        }
     }
 
     public void setDistanceAdd(int distanceAdd) {
-        this.distanceAdd = distanceAdd;
+        sharedPreferences.edit().putString(KEY_DISTANCE_ADD, String.valueOf(distanceAdd)).apply();
     }
 
     public double getWeightLimit() {
-        return weightLimit;
+        String value = sharedPreferences.getString(KEY_WEIGHT_LIMIT, String.valueOf(DEFAULT_WEIGHT_LIMIT));
+        try {
+            return Double.parseDouble(value);
+        } catch (NumberFormatException e) {
+            return DEFAULT_WEIGHT_LIMIT;
+        }
     }
 
     public void setWeightLimit(double weightLimit) {
-        this.weightLimit = weightLimit;
+        sharedPreferences.edit().putString(KEY_WEIGHT_LIMIT, String.valueOf(weightLimit)).apply();
     }
 }
