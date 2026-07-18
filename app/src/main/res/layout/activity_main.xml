@@ -135,38 +135,53 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:orientation="horizontal"
-            android:weightSum="3">
+            android:weightSum="4"> <!-- Изменили weightSum с 3 на 4 -->
 
             <Button
                 android:id="@+id/btnScan"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
                 android:layout_weight="1"
-                android:layout_marginEnd="8dp"
                 android:backgroundTint="#4CAF50"
                 android:padding="12dp"
-                android:text="🔍 Сканировать" />
+                android:text="🔍 Скан."
+                android:textSize="10sp" />
 
             <Button
                 android:id="@+id/btnConnect"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
                 android:layout_weight="1"
-                android:layout_marginEnd="8dp"
                 android:backgroundTint="#2196F3"
                 android:enabled="false"
                 android:padding="12dp"
-                android:text="🔗 Подключить" />
+                android:text="🔗 Подкл."
+                android:textSize="10sp" />
 
             <Button
                 android:id="@+id/btnDisconnect"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
                 android:layout_weight="1"
                 android:backgroundTint="#F44336"
                 android:enabled="false"
                 android:padding="12dp"
-                android:text="⛔ Отключить" />
+                android:text="⛔ Откл."
+                android:textSize="10sp" />
+
+            <!-- Новая кнопка "Очистить" -->
+            <Button
+                android:id="@+id/btnClear"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:backgroundTint="#FF9800"
+                android:padding="12dp"
+                android:text="🧹 Очист."
+                android:textSize="10sp" />
         </LinearLayout>
 
         <!-- Информация -->

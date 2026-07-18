@@ -16,15 +16,18 @@ import android.bluetooth.le.ScanResult;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -54,6 +57,7 @@ public class MainActivity extends AppCompatActivity {
     private Button btnConnect;
     private Button btnDisconnect;
     private Button btnSettings;
+    private Button btnClear; // Новая кнопка
 
     private Gson gson = new Gson();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -86,6 +90,7 @@ public class MainActivity extends AppCompatActivity {
         btnConnect = findViewById(R.id.btnConnect);
         btnDisconnect = findViewById(R.id.btnDisconnect);
         btnSettings = findViewById(R.id.btnSettings);
+        btnClear = findViewById(R.id.btnClear); // Инициализация новой кнопки
 
         // Применение настроек
         updateUIFromSettings();
@@ -115,6 +120,7 @@ public class MainActivity extends AppCompatActivity {
         btnConnect.setOnClickListener(v -> connectToDevice());
         btnDisconnect.setOnClickListener(v -> disconnectDevice());
         btnSettings.setOnClickListener(v -> openSettings());
+        btnClear.setOnClickListener(v -> clearLimitData()); // Обработчик для кнопки очистки
 
         // Обновляем состояние кнопок
         updateUI(false);
@@ -149,24 +155,29 @@ public class MainActivity extends AppCompatActivity {
                 weightCf, distanceAdd, weightLimit));
     }
 
+    /**
+     * Очищает список предельных данных
+     */
+    private void clearLimitData() {
+        tvLimitData.setText("📋 Предельные данные:");
+        Toast.makeText(this, "Список очищен", Toast.LENGTH_SHORT).show();
+    }
+
     private void checkPermissions() {
         String[] permissions;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // Android 12+ (API 31+)
             permissions = new String[]{
                     Manifest.permission.BLUETOOTH_CONNECT,
                     Manifest.permission.BLUETOOTH_SCAN,
                     Manifest.permission.ACCESS_FINE_LOCATION
             };
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            // Android 6-11 (API 23-30)
             permissions = new String[]{
                     Manifest.permission.ACCESS_FINE_LOCATION,
                     Manifest.permission.ACCESS_COARSE_LOCATION
             };
         } else {
-            // Android 5 и ниже (API 21-22)
             return;
         }
 
@@ -203,6 +214,34 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private boolean isLocationEnabled() {
+        LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        if (locationManager == null) {
+            return false;
+        }
+        try {
+            return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                    locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void showLocationDisabledDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Включите геолокацию")
+                .setMessage("Для поиска BLE-устройств необходимо включить геолокацию на устройстве. " +
+                        "Это требование системы Android. Перейти в настройки?")
+                .setPositiveButton("Настройки", (dialog, which) -> {
+                    Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+                    startActivity(intent);
+                })
+                .setNegativeButton("Отмена", (dialog, which) -> {
+                    tvStatus.setText("❌ Сканирование невозможно: геолокация выключена");
+                })
+                .show();
+    }
+
     private void startScan() {
         if (bleScanner == null) {
             Toast.makeText(this, "BLE не поддерживается", Toast.LENGTH_SHORT).show();
@@ -212,6 +251,11 @@ public class MainActivity extends AppCompatActivity {
         if (!bluetoothAdapter.isEnabled()) {
             tvStatus.setText("⚠️ Включите Bluetooth");
             Toast.makeText(this, "Пожалуйста, включите Bluetooth", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        if (!isLocationEnabled()) {
+            showLocationDisabledDialog();
             return;
         }
 
@@ -232,7 +276,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         isScanning = true;
-        btnScan.setText("⏹️ Остановить");
+        btnScan.setText("⏹️ Стоп");
         tvStatus.setText("🔍 Поиск устройств...");
         btnScan.setEnabled(true);
 
@@ -258,7 +302,7 @@ public class MainActivity extends AppCompatActivity {
                 e.printStackTrace();
             }
             isScanning = false;
-            btnScan.setText("🔍 Сканировать");
+            btnScan.setText("🔍 Скан.");
         }
     }
 
@@ -268,28 +312,24 @@ public class MainActivity extends AppCompatActivity {
             BluetoothDevice device = result.getDevice();
             @SuppressLint("MissingPermission") String deviceName = device.getName();
 
-            // Логируем найденные устройства
             if (deviceName != null && !deviceName.isEmpty()) {
                 runOnUiThread(() -> {
                     tvStatus.setText("📱 Найдено: " + deviceName + "\nMAC: " + device.getAddress());
                 });
 
-                // Ищем устройство "Measuring PSS"
                 if (deviceName.equals("Measuring PSS")) {
                     runOnUiThread(() -> {
                         tvStatus.setText("✅ Найдено устройство: " + deviceName + "\nMAC: " + device.getAddress());
                         Toast.makeText(MainActivity.this, "Найдено: " + deviceName, Toast.LENGTH_SHORT).show();
                     });
 
-                    // Останавливаем сканирование
                     stopScan();
 
-                    // Сохраняем устройство для подключения
                     currentDevice = device;
                     runOnUiThread(() -> {
                         btnConnect.setEnabled(true);
                         btnScan.setEnabled(true);
-                        btnScan.setText("🔍 Сканировать");
+                        btnScan.setText("🔍 Скан.");
                     });
                 }
             }
@@ -306,7 +346,7 @@ public class MainActivity extends AppCompatActivity {
                         tvStatus.setText("✅ Найдено: " + deviceName + "\nMAC: " + device.getAddress());
                         btnConnect.setEnabled(true);
                         btnScan.setEnabled(true);
-                        btnScan.setText("🔍 Сканировать");
+                        btnScan.setText("🔍 Скан.");
                     });
                     stopScan();
                     break;
@@ -318,7 +358,7 @@ public class MainActivity extends AppCompatActivity {
         public void onScanFailed(int errorCode) {
             runOnUiThread(() -> {
                 isScanning = false;
-                btnScan.setText("🔍 Сканировать");
+                btnScan.setText("🔍 Скан.");
                 String errorMsg;
                 switch (errorCode) {
                     case SCAN_FAILED_ALREADY_STARTED:
@@ -375,7 +415,7 @@ public class MainActivity extends AppCompatActivity {
         isConnected = false;
         updateUI(false);
         tvStatus.setText("❌ Отключено");
-        jsonBuffer.setLength(0); // Очищаем буфер при отключении
+        jsonBuffer.setLength(0);
     }
 
     private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
@@ -384,11 +424,10 @@ public class MainActivity extends AppCompatActivity {
         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
             if (newState == BluetoothGatt.STATE_CONNECTED) {
                 isConnected = true;
-                jsonBuffer.setLength(0); // Очищаем буфер при подключении
+                jsonBuffer.setLength(0);
                 runOnUiThread(() -> {
                     tvStatus.setText("✅ Подключено к " + currentDevice.getName());
                     updateUI(true);
-                    // Сбрасываем состояние при новом подключении
                     appState.setState(AppState.State.EXPECT_DATA);
                     tvStatus.setText("⏳ Ожидание превышения веса...");
                 });
@@ -423,10 +462,8 @@ public class MainActivity extends AppCompatActivity {
                             }
                         }
 
-                        // Подписываемся на уведомления
                         gatt.setCharacteristicNotification(characteristic, true);
 
-                        // Добавляем дескриптор для уведомлений
                         BluetoothGattDescriptor descriptor = characteristic.getDescriptor(
                                 UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
                         );
@@ -449,20 +486,12 @@ public class MainActivity extends AppCompatActivity {
                 String receivedData = new String(data);
 
                 runOnUiThread(() -> {
-                    // Добавляем полученные данные в буфер
                     jsonBuffer.append(receivedData);
-
-                    // Обрабатываем буфер в цикле, чтобы извлечь все возможные JSON-объекты
                     processJsonBuffer();
                 });
             }
         }
 
-        /**
-         * Обрабатывает буфер jsonBuffer, извлекая все полные JSON-объекты.
-         * Если объект неполный (нет закрывающей скобки), он остается в буфере.
-         * Добавлена логика состояний, записи предельных данных и применения настроек.
-         */
         private void processJsonBuffer() {
             String buffer = jsonBuffer.toString();
             int startIndex = buffer.indexOf("{");
@@ -471,44 +500,32 @@ public class MainActivity extends AppCompatActivity {
                 int endIndex = buffer.indexOf("}", startIndex + 1);
 
                 if (endIndex == -1) {
-                    // Закрывающая скобка не найдена, выходим из цикла
                     break;
                 }
 
-                // Извлекаем полный JSON
                 String fullJson = buffer.substring(startIndex, endIndex + 1);
-
-                // Отображаем сырые данные
                 tvRawData.setText("📨 RAW: " + fullJson);
 
                 try {
-                    // Парсим JSON
                     DataModel dataModel = gson.fromJson(fullJson, DataModel.class);
 
-                    // Получаем настройки из SharedPreferences
                     double weightCf = appSettings.getWeightCf();
                     int distanceAdd = appSettings.getDistanceAdd();
                     double weightLimit = appSettings.getWeightLimit();
 
-                    // Применяем коэффициент к весу (может быть отрицательным) и корректировку к расстоянию
                     double correctedWeight = dataModel.getWeight() * weightCf;
                     int correctedDistance = dataModel.getDistance() + distanceAdd;
 
-                    // Обновляем UI с откорректированными значениями
                     tvWeight.setText(String.format("⚖️ Вес: %.2f г", correctedWeight));
                     tvDistance.setText(String.format("📏 Расстояние: %d мм", correctedDistance));
 
-                    // --- Логика состояний и записи предельных данных ---
                     if (appState.getCurrentState() == AppState.State.EXPECT_DATA) {
-                        // Состояние 1: Ожидаем превышения веса
                         if (correctedWeight > weightLimit && !appState.isDataRecordedForCycle()) {
-                            // Вес превышен! Записываем данные.
                             String timestamp = new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
                                     .format(new java.util.Date());
                             String record = String.format("[%s] Вес: %.2f г, Расст: %d мм",
                                     timestamp, correctedWeight, correctedDistance);
 
-                            // Добавляем в TextView с историей, переводя строку
                             String currentText = tvLimitData.getText().toString();
                             if (currentText.equals("📋 Предельные данные:")) {
                                 tvLimitData.setText(record);
@@ -516,19 +533,15 @@ public class MainActivity extends AppCompatActivity {
                                 tvLimitData.append("\n" + record);
                             }
 
-                            // Отмечаем, что данные для этого цикла записаны
                             dataModel.setRecorded(true);
                             appState.setDataRecordedForCycle(true);
 
-                            // Переходим в состояние ожидания возврата веса
                             appState.setState(AppState.State.EXPECT_RETURN);
                             tvStatus.setText("⏳ Ожидание снижения веса...");
                         }
                     } else if (appState.getCurrentState() == AppState.State.EXPECT_RETURN) {
-                        // Состояние 2: Ожидаем возврата веса к значению меньше WeightLimit * 0.9
                         double returnThreshold = weightLimit * 0.9;
                         if (correctedWeight < returnThreshold) {
-                            // Вес вернулся к норме. Переходим обратно в состояние ожидания превышения.
                             appState.setState(AppState.State.EXPECT_DATA);
                             tvStatus.setText("⏳ Ожидание превышения веса...");
                         }
@@ -539,16 +552,13 @@ public class MainActivity extends AppCompatActivity {
                     e.printStackTrace();
                 }
 
-                // Удаляем обработанный JSON из буфера, начиная с символа, который идет за ним
                 buffer = buffer.substring(endIndex + 1);
                 startIndex = buffer.indexOf("{");
             }
 
-            // Обновляем буфер, оставляя только необработанные данные
             jsonBuffer.setLength(0);
             jsonBuffer.append(buffer);
 
-            // Если в буфере остались данные, показываем их как "неполный JSON"
             if (jsonBuffer.length() > 0) {
                 tvRawData.setText("📨 Буфер: " + jsonBuffer.toString());
             }
@@ -564,7 +574,6 @@ public class MainActivity extends AppCompatActivity {
             tvWeight.setText("⚖️ Вес: --");
             tvDistance.setText("📏 Расстояние: --");
             tvRawData.setText("📨 Ожидание данных...");
-            // Не очищаем tvLimitData, чтобы сохранить историю
         }
     }
 
