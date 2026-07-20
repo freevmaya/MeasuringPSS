@@ -1,3 +1,10 @@
 <resources>
     <string name="app_name">Measuring PSS</string>
+    <string-array name="row_array">
+        <item>A</item>
+        <item>B</item>
+        <item>C</item>
+        <item>D</item>
+        <item>E</item>
+    </string-array>
 </resources>

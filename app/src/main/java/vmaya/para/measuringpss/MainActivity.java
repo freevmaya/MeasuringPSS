@@ -22,7 +22,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -34,6 +36,9 @@ import androidx.core.content.ContextCompat;
 
 import com.google.gson.Gson;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity {
@@ -49,15 +54,15 @@ public class MainActivity extends AppCompatActivity {
     private boolean isScanning = false;
 
     private TextView tvStatus;
-    private TextView tvWeight;
-    private TextView tvDistance;
+    private TextView tvWeightDistance; // Объединённое поле для веса и расстояния
     private TextView tvRawData;
     private TextView tvLimitData;
     private Button btnScan;
     private Button btnConnect;
     private Button btnDisconnect;
     private Button btnSettings;
-    private Button btnClear; // Новая кнопка
+    private Button btnClear;
+    private Spinner spinnerRow; // Spinner для выбора ряда
 
     private Gson gson = new Gson();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -65,6 +70,10 @@ public class MainActivity extends AppCompatActivity {
 
     // Буфер для накопления данных
     private final StringBuilder jsonBuffer = new StringBuilder();
+
+    // Список для хранения записей предельных данных
+    private final List<DataSample> limitDataList = new ArrayList<>();
+    private int recordCounter = 0;
 
     private static final int REQUEST_PERMISSIONS = 1;
 
@@ -82,15 +91,21 @@ public class MainActivity extends AppCompatActivity {
 
         // Инициализация UI
         tvStatus = findViewById(R.id.tvStatus);
-        tvWeight = findViewById(R.id.tvWeight);
-        tvDistance = findViewById(R.id.tvDistance);
+        tvWeightDistance = findViewById(R.id.tvWeightDistance); // Обновлённый ID
         tvRawData = findViewById(R.id.tvRawData);
         tvLimitData = findViewById(R.id.tvLimitData);
         btnScan = findViewById(R.id.btnScan);
         btnConnect = findViewById(R.id.btnConnect);
         btnDisconnect = findViewById(R.id.btnDisconnect);
         btnSettings = findViewById(R.id.btnSettings);
-        btnClear = findViewById(R.id.btnClear); // Инициализация новой кнопки
+        btnClear = findViewById(R.id.btnClear);
+        spinnerRow = findViewById(R.id.spinnerRow); // Инициализация Spinner
+
+        // Настройка Spinner
+        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(this,
+                R.array.row_array, android.R.layout.simple_spinner_item);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinnerRow.setAdapter(adapter);
 
         // Применение настроек
         updateUIFromSettings();
@@ -120,7 +135,7 @@ public class MainActivity extends AppCompatActivity {
         btnConnect.setOnClickListener(v -> connectToDevice());
         btnDisconnect.setOnClickListener(v -> disconnectDevice());
         btnSettings.setOnClickListener(v -> openSettings());
-        btnClear.setOnClickListener(v -> clearLimitData()); // Обработчик для кнопки очистки
+        btnClear.setOnClickListener(v -> clearLimitData());
 
         // Обновляем состояние кнопок
         updateUI(false);
@@ -128,8 +143,8 @@ public class MainActivity extends AppCompatActivity {
         // Устанавливаем начальный статус
         tvStatus.setText("⏳ Ожидание превышения веса...");
 
-        // Устанавливаем текст по умолчанию для tvLimitData
-        tvLimitData.setText("📋 Предельные данные:");
+        // Обновляем отображение списка
+        updateLimitDataDisplay();
     }
 
     private void openSettings() {
@@ -156,11 +171,57 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Очищает список предельных данных
+     * Обновляет отображение списка предельных данных в tvLimitData
+     */
+    private void updateLimitDataDisplay() {
+        StringBuilder displayText = new StringBuilder("📋 Предельные данные:");
+
+        if (!limitDataList.isEmpty()) {
+            for (DataSample sample : limitDataList) {
+                displayText.append("\n").append(sample.toString());
+            }
+        }
+
+        tvLimitData.setText(displayText.toString());
+    }
+
+    /**
+     * Добавляет новую запись в список предельных данных
+     */
+    private void addLimitDataRecord(double weight, int distance) {
+        recordCounter++;
+        // Получаем выбранный ряд из Spinner
+        String selectedRow = spinnerRow.getSelectedItem().toString();
+        // Преобразуем в int (0 для A, 1 для B и т.д.), либо можно хранить как строку.
+        // В DataSample поле row - int. Предположим, что A=1, B=2, C=3, D=4, E=5.
+        int rowValue = 0;
+        switch (selectedRow) {
+            case "A": rowValue = 1; break;
+            case "B": rowValue = 2; break;
+            case "C": rowValue = 3; break;
+            case "D": rowValue = 4; break;
+            case "E": rowValue = 5; break;
+            default: rowValue = 1; // На случай, если значение не распознано
+        }
+
+        DataSample sample = new DataSample(recordCounter, rowValue, weight, distance);
+        limitDataList.add(sample);
+        updateLimitDataDisplay();
+    }
+
+    /**
+     * Удаляет последнюю запись из списка предельных данных
      */
     private void clearLimitData() {
-        tvLimitData.setText("📋 Предельные данные:");
-        Toast.makeText(this, "Список очищен", Toast.LENGTH_SHORT).show();
+        if (limitDataList.isEmpty()) {
+            Toast.makeText(this, "Нет данных для удаления", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // Удаляем последнюю запись
+        limitDataList.remove(limitDataList.size() - 1);
+        updateLimitDataDisplay();
+        Toast.makeText(this, "Последняя запись удалена", Toast.LENGTH_SHORT).show();
     }
 
     private void checkPermissions() {
@@ -306,6 +367,28 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Автоматическое подключение к найденному устройству
+     */
+    @SuppressLint("MissingPermission")
+    private void autoConnectToDevice(BluetoothDevice device) {
+        if (device == null) {
+            return;
+        }
+
+        // Проверяем разрешение на подключение
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                tvStatus.setText("❌ Нет разрешения BLUETOOTH_CONNECT");
+                return;
+            }
+        }
+
+        currentDevice = device;
+        tvStatus.setText("🔗 Автоподключение к " + device.getName() + "...");
+        bluetoothGatt = device.connectGatt(this, false, gattCallback);
+    }
+
     private final ScanCallback scanCallback = new ScanCallback() {
         @Override
         public void onScanResult(int callbackType, ScanResult result) {
@@ -320,17 +403,14 @@ public class MainActivity extends AppCompatActivity {
                 if (deviceName.equals("Measuring PSS")) {
                     runOnUiThread(() -> {
                         tvStatus.setText("✅ Найдено устройство: " + deviceName + "\nMAC: " + device.getAddress());
-                        Toast.makeText(MainActivity.this, "Найдено: " + deviceName, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this, "Найдено: " + deviceName + ", подключение...", Toast.LENGTH_SHORT).show();
                     });
 
+                    // Останавливаем сканирование
                     stopScan();
 
-                    currentDevice = device;
-                    runOnUiThread(() -> {
-                        btnConnect.setEnabled(true);
-                        btnScan.setEnabled(true);
-                        btnScan.setText("🔍 Скан.");
-                    });
+                    // Автоматически подключаемся
+                    autoConnectToDevice(device);
                 }
             }
         }
@@ -341,14 +421,13 @@ public class MainActivity extends AppCompatActivity {
                 BluetoothDevice device = result.getDevice();
                 @SuppressLint("MissingPermission") String deviceName = device.getName();
                 if (deviceName != null && deviceName.equals("Measuring PSS")) {
-                    currentDevice = device;
                     runOnUiThread(() -> {
                         tvStatus.setText("✅ Найдено: " + deviceName + "\nMAC: " + device.getAddress());
-                        btnConnect.setEnabled(true);
-                        btnScan.setEnabled(true);
-                        btnScan.setText("🔍 Скан.");
+                        Toast.makeText(MainActivity.this, "Найдено: " + deviceName + ", подключение...", Toast.LENGTH_SHORT).show();
                     });
+
                     stopScan();
+                    autoConnectToDevice(device);
                     break;
                 }
             }
@@ -516,22 +595,13 @@ public class MainActivity extends AppCompatActivity {
                     double correctedWeight = dataModel.getWeight() * weightCf;
                     int correctedDistance = dataModel.getDistance() + distanceAdd;
 
-                    tvWeight.setText(String.format("⚖️ Вес: %.2f г", correctedWeight));
-                    tvDistance.setText(String.format("📏 Расстояние: %d мм", correctedDistance));
+                    // Обновляем объединённое поле
+                    tvWeightDistance.setText(String.format("⚖️: %.2f г, 📏: %d мм", correctedWeight, correctedDistance));
 
                     if (appState.getCurrentState() == AppState.State.EXPECT_DATA) {
                         if (correctedWeight > weightLimit && !appState.isDataRecordedForCycle()) {
-                            String timestamp = new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
-                                    .format(new java.util.Date());
-                            String record = String.format("[%s] Вес: %.2f г, Расст: %d мм",
-                                    timestamp, correctedWeight, correctedDistance);
-
-                            String currentText = tvLimitData.getText().toString();
-                            if (currentText.equals("📋 Предельные данные:")) {
-                                tvLimitData.setText(record);
-                            } else {
-                                tvLimitData.append("\n" + record);
-                            }
+                            // Добавляем запись в список как DataSample
+                            addLimitDataRecord(correctedWeight, correctedDistance);
 
                             dataModel.setRecorded(true);
                             appState.setDataRecordedForCycle(true);
@@ -548,7 +618,7 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                 } catch (Exception e) {
-                    tvWeight.setText("⚠️ Ошибка парсинга: " + e.getMessage());
+                    tvWeightDistance.setText("⚠️ Ошибка парсинга: " + e.getMessage());
                     e.printStackTrace();
                 }
 
@@ -571,8 +641,7 @@ public class MainActivity extends AppCompatActivity {
         btnDisconnect.setEnabled(connected);
 
         if (!connected) {
-            tvWeight.setText("⚖️ Вес: --");
-            tvDistance.setText("📏 Расстояние: --");
+            tvWeightDistance.setText("⚖️: --, 📏: --");
             tvRawData.setText("📨 Ожидание данных...");
         }
     }

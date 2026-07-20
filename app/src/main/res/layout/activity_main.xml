@@ -60,30 +60,46 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/titleLayout" />
 
-    <!-- Данные с датчиков -->
+    <!-- Объединённые данные с датчиков -->
     <TextView
-        android:id="@+id/tvWeight"
+        android:id="@+id/tvWeightDistance"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:background="#FFFFFF"
         android:padding="12dp"
-        android:text="⚖️ Вес: --"
+        android:text="⚖️ Вес: --, 📏 Расст: --"
         android:textSize="18sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tvStatus" />
 
-    <TextView
-        android:id="@+id/tvDistance"
+    <!-- Поле выбора Ряда -->
+    <LinearLayout
+        android:id="@+id/layoutRowSelector"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:background="#FFFFFF"
-        android:padding="12dp"
-        android:text="📏 Расстояние: --"
-        android:textSize="18sp"
+        android:padding="8dp"
+        android:orientation="horizontal"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvWeight" />
+        app:layout_constraintTop_toBottomOf="@id/tvWeightDistance">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:text="Ряд:"
+            android:textSize="18sp"
+            android:layout_marginEnd="8dp" />
+
+        <Spinner
+            android:id="@+id/spinnerRow"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:entries="@array/row_array" />
+    </LinearLayout>
 
     <!-- ScrollView для предельных данных -->
     <ScrollView
@@ -96,7 +112,7 @@
         app:layout_constraintBottom_toTopOf="@id/bottomGroup"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvDistance">
+        app:layout_constraintTop_toBottomOf="@id/layoutRowSelector">
 
         <TextView
             android:id="@+id/tvLimitData"
@@ -135,7 +151,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:orientation="horizontal"
-            android:weightSum="4"> <!-- Изменили weightSum с 3 на 4 -->
+            android:weightSum="4">
 
             <Button
                 android:id="@+id/btnScan"
@@ -172,7 +188,6 @@
                 android:text="⛔ Откл."
                 android:textSize="10sp" />
 
-            <!-- Новая кнопка "Очистить" -->
             <Button
                 android:id="@+id/btnClear"
                 android:layout_width="0dp"
@@ -180,7 +195,7 @@
                 android:layout_weight="1"
                 android:backgroundTint="#FF9800"
                 android:padding="12dp"
-                android:text="🧹 Очист."
+                android:text="Удал."
                 android:textSize="10sp" />
         </LinearLayout>
 
