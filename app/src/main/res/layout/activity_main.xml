@@ -197,6 +197,14 @@
                 android:padding="12dp"
                 android:text="Удал."
                 android:textSize="10sp" />
+
+            <Button
+                android:id="@+id/btnDataTable"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="16dp"
+                android:text="Данные" />
         </LinearLayout>
 
         <!-- Информация -->

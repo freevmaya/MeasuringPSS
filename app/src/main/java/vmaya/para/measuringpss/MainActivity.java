@@ -22,6 +22,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.Spinner;
@@ -145,6 +146,14 @@ public class MainActivity extends AppCompatActivity {
 
         // Обновляем отображение списка
         updateLimitDataDisplay();
+
+        View btnDataTable = findViewById(R.id.btnDataTable);
+        btnDataTable.setOnClickListener(v -> openDataTable());
+    }
+
+    private void openDataTable() {
+        Intent intent = new Intent(this, DataTableActivity.class);
+        startActivity(intent);
     }
 
     private void openSettings() {
