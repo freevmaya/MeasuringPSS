@@ -1,3 +1,4 @@
+// app/src/main/java/vmaya/para/measuringpss/SettingsActivity.java
 package vmaya.para.measuringpss;
 
 import android.os.Bundle;

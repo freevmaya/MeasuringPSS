@@ -9,6 +9,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.OpenableColumns;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TableLayout;
@@ -18,6 +19,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
@@ -40,14 +42,30 @@ public class DataTableActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_data_table);
 
+        // Настройка Toolbar с кнопкой назад
+        Toolbar toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+            getSupportActionBar().setTitle("Таблица данных");
+        }
+
         tableData = findViewById(R.id.tableData);
         btnLoadCsv = findViewById(R.id.btnLoadCsv);
 
         btnLoadCsv.setOnClickListener(v -> loadCsvFile());
     }
 
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == android.R.id.home) {
+            finish();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
     private void loadCsvFile() {
-        // Проверяем разрешения для Android 10 и ниже
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
                     != PackageManager.PERMISSION_GRANTED) {
@@ -58,12 +76,10 @@ public class DataTableActivity extends AppCompatActivity {
             }
         }
 
-        // Открываем файловый менеджер для выбора CSV файла
         Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
         intent.setType("*/*");
         intent.addCategory(Intent.CATEGORY_OPENABLE);
 
-        // Добавляем MIME типы для CSV
         String[] mimeTypes = {
                 "text/csv",
                 "text/plain",
@@ -75,7 +91,6 @@ public class DataTableActivity extends AppCompatActivity {
         };
         intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
 
-        // Для Android 4.4+ используем ACTION_OPEN_DOCUMENT
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -116,7 +131,7 @@ public class DataTableActivity extends AppCompatActivity {
                 }
 
                 Toast.makeText(this, "Загрузка файла: " + fileName, Toast.LENGTH_SHORT).show();
-                parseCsvFile(uri);
+                parseCsvFile(uri, fileName);
             }
         }
     }
@@ -156,33 +171,36 @@ public class DataTableActivity extends AppCompatActivity {
                 lowerName.endsWith(".dat");
     }
 
-    private void parseCsvFile(Uri uri) {
+    private void parseCsvFile(Uri uri, String fileName) {
         List<String[]> rows = new ArrayList<>();
         try (InputStream inputStream = getContentResolver().openInputStream(uri);
              BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
 
             String line;
             while ((line = reader.readLine()) != null) {
-                // Пропускаем пустые строки
                 if (line.trim().isEmpty()) {
                     continue;
                 }
 
-                // Разделяем строку по запятой, учитывая возможные кавычки
                 String[] row = parseCsvLine(line);
                 rows.add(row);
             }
 
             if (rows.isEmpty()) {
                 Toast.makeText(this, "Файл пуст или не содержит данных", Toast.LENGTH_SHORT).show();
+                DataManager.getInstance().clearCsvData();
                 return;
             }
 
+            DataManager.getInstance().setCsvData(rows, fileName);
             displayTable(rows);
+
+            Toast.makeText(this, "Загружено " + rows.size() + " записей из " + fileName, Toast.LENGTH_LONG).show();
 
         } catch (Exception e) {
             e.printStackTrace();
             Toast.makeText(this, "Ошибка чтения файла: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            DataManager.getInstance().clearCsvData();
         }
     }
 
@@ -227,23 +245,19 @@ public class DataTableActivity extends AppCompatActivity {
             }
         }
 
-        // Находим максимальное количество
         int maxCount = Math.max(Math.max(Math.max(Math.max(commaCount, semicolonCount),
                 Math.max(tabCount, spaceCount)), pipeCount), 0);
 
-        // Если все счетчики равны 0, возвращаем запятую как разделитель по умолчанию
         if (maxCount == 0) {
             return ',';
         }
 
-        // Возвращаем разделитель с максимальным количеством вхождений
         if (commaCount == maxCount) return ',';
         if (semicolonCount == maxCount) return ';';
         if (tabCount == maxCount) return '\t';
         if (spaceCount == maxCount) return ' ';
         if (pipeCount == maxCount) return '|';
 
-        // Если ничего не подошло, возвращаем запятую по умолчанию
         return ',';
     }
 
@@ -255,7 +269,6 @@ public class DataTableActivity extends AppCompatActivity {
             return;
         }
 
-        // Определяем максимальное количество колонок
         int maxColumns = 0;
         for (String[] row : rows) {
             if (row.length > maxColumns) {
@@ -268,11 +281,9 @@ public class DataTableActivity extends AppCompatActivity {
             return;
         }
 
-        // Создаем заголовки с буквами (A, B, C, D, E, ...)
         String[] headers = generateColumnHeaders(maxColumns);
         addTableRow(headers, true);
 
-        // Добавляем строки данных (все строки из файла, включая первую)
         for (String[] row : rows) {
             if (row.length < maxColumns) {
                 String[] newRow = new String[maxColumns];
@@ -288,11 +299,6 @@ public class DataTableActivity extends AppCompatActivity {
         Toast.makeText(this, "Загружено " + rows.size() + " записей", Toast.LENGTH_SHORT).show();
     }
 
-    /**
-     * Генерирует заголовки колонок в формате A, B, C, D, E, ...
-     * @param count Количество колонок
-     * @return Массив заголовков
-     */
     private String[] generateColumnHeaders(int count) {
         String[] headers = new String[count];
         for (int i = 0; i < count; i++) {
@@ -301,14 +307,9 @@ public class DataTableActivity extends AppCompatActivity {
         return headers;
     }
 
-    /**
-     * Преобразует номер колонки в буквенное обозначение (0 -> A, 25 -> Z, 26 -> AA, 27 -> AB, ...)
-     * @param index Индекс колонки (начиная с 0)
-     * @return Буквенное обозначение колонки
-     */
     private String getColumnLetter(int index) {
         StringBuilder sb = new StringBuilder();
-        index++; // Сдвигаем, чтобы 0 -> A, 1 -> B, ...
+        index++;
 
         while (index > 0) {
             index--;
@@ -332,39 +333,33 @@ public class DataTableActivity extends AppCompatActivity {
             textView.setText(column != null ? column : "");
             textView.setPadding(12, 8, 12, 8);
 
-            // Настройка ширины текста - автоматическое обрезание длинного текста
             textView.setMaxLines(1);
             textView.setEllipsize(android.text.TextUtils.TruncateAt.END);
 
             if (isHeader) {
-                // Заголовки: темный фон, белый текст, жирный шрифт
                 textView.setBackgroundColor(getResources().getColor(android.R.color.darker_gray));
                 textView.setTextColor(getResources().getColor(android.R.color.white));
                 textView.setTextSize(16);
                 textView.setTypeface(null, android.graphics.Typeface.BOLD);
             } else {
-                // Строки данных: чередование цветов для лучшей читаемости
                 int position = tableData.getChildCount();
                 if (position % 2 == 1) {
-                    textView.setBackgroundColor(0xFFF5F5F5); // Светло-серый
+                    textView.setBackgroundColor(0xFFF5F5F5);
                 } else {
-                    textView.setBackgroundColor(0xFFFFFFFF); // Белый
+                    textView.setBackgroundColor(0xFFFFFFFF);
                 }
-                // Убираем черную полосу между строками
-                // Не добавляем никаких разделителей
             }
 
             tableRow.addView(textView);
         }
 
-        // Добавляем тонкую серую линию под каждой строкой для разделения (опционально)
         if (!isHeader) {
             View divider = new View(this);
             divider.setLayoutParams(new TableRow.LayoutParams(
                     TableRow.LayoutParams.MATCH_PARENT,
-                    1 // Высота 1px
+                    1
             ));
-            divider.setBackgroundColor(0xFFE0E0E0); // Светло-серый цвет
+            divider.setBackgroundColor(0xFFE0E0E0);
             tableRow.addView(divider);
         }
 

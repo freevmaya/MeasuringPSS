@@ -1,3 +1,4 @@
+// app/src/main/java/vmaya/para/measuringpss/MainActivity.java
 package vmaya.para.measuringpss;
 
 import android.Manifest;
@@ -25,6 +26,7 @@ import android.provider.Settings;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -55,15 +57,16 @@ public class MainActivity extends AppCompatActivity {
     private boolean isScanning = false;
 
     private TextView tvStatus;
-    private TextView tvWeightDistance; // Объединённое поле для веса и расстояния
+    private TextView tvWeightDistance;
     private TextView tvRawData;
     private TextView tvLimitData;
+    private ScrollView limitDataScrollView;
     private Button btnScan;
     private Button btnConnect;
     private Button btnDisconnect;
     private Button btnSettings;
     private Button btnClear;
-    private Spinner spinnerRow; // Spinner для выбора ряда
+    private Spinner spinnerRow;
 
     private Gson gson = new Gson();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -75,6 +78,12 @@ public class MainActivity extends AppCompatActivity {
     // Список для хранения записей предельных данных
     private final List<DataSample> limitDataList = new ArrayList<>();
     private int recordCounter = 0;
+
+    // Для работы с CSV таблицей
+    private int currentRowIndex = 0;
+    private int currentColumnIndex = 0;
+    private boolean isTableDataExhausted = false;
+    private int currentCsvRowNumber = 1;
 
     private static final int REQUEST_PERMISSIONS = 1;
 
@@ -92,15 +101,16 @@ public class MainActivity extends AppCompatActivity {
 
         // Инициализация UI
         tvStatus = findViewById(R.id.tvStatus);
-        tvWeightDistance = findViewById(R.id.tvWeightDistance); // Обновлённый ID
+        tvWeightDistance = findViewById(R.id.tvWeightDistance);
         tvRawData = findViewById(R.id.tvRawData);
         tvLimitData = findViewById(R.id.tvLimitData);
+        limitDataScrollView = findViewById(R.id.limitDataScrollView);
         btnScan = findViewById(R.id.btnScan);
         btnConnect = findViewById(R.id.btnConnect);
         btnDisconnect = findViewById(R.id.btnDisconnect);
         btnSettings = findViewById(R.id.btnSettings);
         btnClear = findViewById(R.id.btnClear);
-        spinnerRow = findViewById(R.id.spinnerRow); // Инициализация Spinner
+        spinnerRow = findViewById(R.id.spinnerRow);
 
         // Настройка Spinner
         ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(this,
@@ -164,45 +174,53 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // Обновляем UI при возврате из настроек
         updateUIFromSettings();
     }
 
     private void updateUIFromSettings() {
-        // Обновляем отображение текущих настроек
         double weightCf = appSettings.getWeightCf();
         int distanceAdd = appSettings.getDistanceAdd();
         double weightLimit = appSettings.getWeightLimit();
 
-        // Обновляем статус с текущими настройками
         tvStatus.setText(String.format("⚙️ Коэф: %.2f, Корр: %d, Предел: %.1f",
                 weightCf, distanceAdd, weightLimit));
     }
 
     /**
      * Обновляет отображение списка предельных данных в tvLimitData
+     * и автоматически прокручивает вниз
      */
     private void updateLimitDataDisplay() {
         StringBuilder displayText = new StringBuilder("📋 Предельные данные:");
 
-        if (!limitDataList.isEmpty()) {
+        if (limitDataList.isEmpty()) {
+            displayText.append("\nНет данных");
+        } else {
             for (DataSample sample : limitDataList) {
                 displayText.append("\n").append(sample.toString());
             }
         }
 
         tvLimitData.setText(displayText.toString());
+
+        // Автоматическая прокрутка вниз
+        limitDataScrollView.post(() -> {
+            limitDataScrollView.fullScroll(View.FOCUS_DOWN);
+        });
     }
 
     /**
      * Добавляет новую запись в список предельных данных
+     * @param correctedWeight скорректированный вес с датчика (округляется до int)
+     * @param targetWeight значение из CSV таблицы (потребная длина) - округляется до int
+     * @param distance скорректированное расстояние
+     * @param diff разница с таблицей CSV
+     * @param weightLimit текущий предел веса
      */
-    private void addLimitDataRecord(double weight, int distance) {
+    private void addLimitDataRecord(double correctedWeight, double targetWeight, int distance, double diff, double weightLimit) {
         recordCounter++;
         // Получаем выбранный ряд из Spinner
         String selectedRow = spinnerRow.getSelectedItem().toString();
-        // Преобразуем в int (0 для A, 1 для B и т.д.), либо можно хранить как строку.
-        // В DataSample поле row - int. Предположим, что A=1, B=2, C=3, D=4, E=5.
         int rowValue = 0;
         switch (selectedRow) {
             case "A": rowValue = 1; break;
@@ -210,16 +228,21 @@ public class MainActivity extends AppCompatActivity {
             case "C": rowValue = 3; break;
             case "D": rowValue = 4; break;
             case "E": rowValue = 5; break;
-            default: rowValue = 1; // На случай, если значение не распознано
+            default: rowValue = 1;
         }
 
-        DataSample sample = new DataSample(recordCounter, rowValue, weight, distance);
+        // Сохраняем разницу с пределом веса (превышение) - округляем до целого
+        int weightOverLimit = (int) Math.round(correctedWeight - weightLimit);
+        int targetWeightInt = (int) Math.round(targetWeight);
+
+        DataSample sample = new DataSample(recordCounter, rowValue, weightOverLimit, targetWeightInt, distance, diff);
         limitDataList.add(sample);
         updateLimitDataDisplay();
     }
 
     /**
      * Удаляет последнюю запись из списка предельных данных
+     * Также уменьшает счетчик записей, чтобы нумерация была последовательной
      */
     private void clearLimitData() {
         if (limitDataList.isEmpty()) {
@@ -229,6 +252,10 @@ public class MainActivity extends AppCompatActivity {
 
         // Удаляем последнюю запись
         limitDataList.remove(limitDataList.size() - 1);
+        // Уменьшаем счетчик записей
+        if (recordCounter > 0) {
+            recordCounter--;
+        }
         updateLimitDataDisplay();
         Toast.makeText(this, "Последняя запись удалена", Toast.LENGTH_SHORT).show();
     }
@@ -329,7 +356,6 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Проверяем разрешения для сканирования
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
                 tvStatus.setText("❌ Нет разрешения BLUETOOTH_SCAN");
@@ -346,14 +372,12 @@ public class MainActivity extends AppCompatActivity {
         }
 
         isScanning = true;
-        btnScan.setText("⏹️ Стоп");
+        btnScan.setText("");
         tvStatus.setText("🔍 Поиск устройств...");
         btnScan.setEnabled(true);
 
-        // Запускаем сканирование
         bleScanner.startScan(scanCallback);
 
-        // Автоматически останавливаем через 15 секунд
         handler.postDelayed(() -> {
             if (isScanning) {
                 stopScan();
@@ -372,20 +396,16 @@ public class MainActivity extends AppCompatActivity {
                 e.printStackTrace();
             }
             isScanning = false;
-            btnScan.setText("🔍 Скан.");
+            btnScan.setText("");
         }
     }
 
-    /**
-     * Автоматическое подключение к найденному устройству
-     */
     @SuppressLint("MissingPermission")
     private void autoConnectToDevice(BluetoothDevice device) {
         if (device == null) {
             return;
         }
 
-        // Проверяем разрешение на подключение
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                 tvStatus.setText("❌ Нет разрешения BLUETOOTH_CONNECT");
@@ -415,10 +435,7 @@ public class MainActivity extends AppCompatActivity {
                         Toast.makeText(MainActivity.this, "Найдено: " + deviceName + ", подключение...", Toast.LENGTH_SHORT).show();
                     });
 
-                    // Останавливаем сканирование
                     stopScan();
-
-                    // Автоматически подключаемся
                     autoConnectToDevice(device);
                 }
             }
@@ -446,7 +463,7 @@ public class MainActivity extends AppCompatActivity {
         public void onScanFailed(int errorCode) {
             runOnUiThread(() -> {
                 isScanning = false;
-                btnScan.setText("🔍 Скан.");
+                btnScan.setText("");
                 String errorMsg;
                 switch (errorCode) {
                     case SCAN_FAILED_ALREADY_STARTED:
@@ -504,6 +521,98 @@ public class MainActivity extends AppCompatActivity {
         updateUI(false);
         tvStatus.setText("❌ Отключено");
         jsonBuffer.setLength(0);
+        resetTableState();
+    }
+
+    private void resetTableState() {
+        currentRowIndex = 0;
+        currentColumnIndex = 0;
+        isTableDataExhausted = false;
+        currentCsvRowNumber = 1;
+    }
+
+    private boolean advanceToNextTableCell() {
+        DataManager dataManager = DataManager.getInstance();
+
+        if (!dataManager.isCsvLoaded()) {
+            return false;
+        }
+
+        int rowCount = dataManager.getRowCount();
+        int columnCount = dataManager.getColumnCount();
+
+        if (rowCount == 0 || columnCount == 0) {
+            isTableDataExhausted = true;
+            return true;
+        }
+
+        if (currentRowIndex >= rowCount) {
+            currentRowIndex = 0;
+            currentColumnIndex++;
+            currentCsvRowNumber = 1;
+
+            if (currentColumnIndex >= columnCount) {
+                isTableDataExhausted = true;
+                return true;
+            }
+
+            String value = dataManager.getCellValue(currentRowIndex, currentColumnIndex);
+            if (value == null) {
+                return advanceToNextNonEmptyCell(dataManager);
+            }
+
+            return false;
+        }
+
+        String value = dataManager.getCellValue(currentRowIndex, currentColumnIndex);
+        if (value == null) {
+            return advanceToNextNonEmptyCell(dataManager);
+        }
+
+        return false;
+    }
+
+    private boolean advanceToNextNonEmptyCell(DataManager dataManager) {
+        int rowCount = dataManager.getRowCount();
+        int columnCount = dataManager.getColumnCount();
+
+        for (int row = currentRowIndex; row < rowCount; row++) {
+            for (int col = (row == currentRowIndex ? currentColumnIndex : 0); col < columnCount; col++) {
+                String value = dataManager.getCellValue(row, col);
+                if (value != null && !value.trim().isEmpty()) {
+                    currentRowIndex = row;
+                    currentColumnIndex = col;
+                    currentCsvRowNumber = row + 1;
+                    return false;
+                }
+            }
+        }
+
+        isTableDataExhausted = true;
+        return true;
+    }
+
+    private Double getCurrentCsvValue() {
+        DataManager dataManager = DataManager.getInstance();
+        if (!dataManager.isCsvLoaded() || isTableDataExhausted) {
+            return null;
+        }
+
+        String value = dataManager.getCellValue(currentRowIndex, currentColumnIndex);
+        if (value == null) {
+            return null;
+        }
+
+        try {
+            value = value.replace(',', '.');
+            return Double.parseDouble(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private int getCurrentRowNumber() {
+        return currentCsvRowNumber;
     }
 
     private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
@@ -518,6 +627,7 @@ public class MainActivity extends AppCompatActivity {
                     updateUI(true);
                     appState.setState(AppState.State.EXPECT_DATA);
                     tvStatus.setText("⏳ Ожидание превышения веса...");
+                    resetTableState();
                 });
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -533,6 +643,7 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     tvStatus.setText("❌ Отключено");
                     updateUI(false);
+                    resetTableState();
                 });
             }
         }
@@ -604,19 +715,22 @@ public class MainActivity extends AppCompatActivity {
                     double correctedWeight = dataModel.getWeight() * weightCf;
                     int correctedDistance = dataModel.getDistance() + distanceAdd;
 
-                    // Обновляем объединённое поле
                     tvWeightDistance.setText(String.format("⚖️: %.2f г, 📏: %d мм", correctedWeight, correctedDistance));
 
                     if (appState.getCurrentState() == AppState.State.EXPECT_DATA) {
                         if (correctedWeight > weightLimit && !appState.isDataRecordedForCycle()) {
-                            // Добавляем запись в список как DataSample
-                            addLimitDataRecord(correctedWeight, correctedDistance);
+                            DataManager dataManager = DataManager.getInstance();
 
-                            dataModel.setRecorded(true);
-                            appState.setDataRecordedForCycle(true);
-
-                            appState.setState(AppState.State.EXPECT_RETURN);
-                            tvStatus.setText("⏳ Ожидание снижения веса...");
+                            if (dataManager.isCsvLoaded()) {
+                                processWithCsvData(correctedWeight, correctedDistance, dataModel, weightLimit);
+                            } else {
+                                // Работаем по старой логике без CSV
+                                addLimitDataRecord(correctedWeight, 0.0, correctedDistance, 0.0, weightLimit);
+                                dataModel.setRecorded(true);
+                                appState.setDataRecordedForCycle(true);
+                                appState.setState(AppState.State.EXPECT_RETURN);
+                                tvStatus.setText("⏳ Ожидание снижения веса...");
+                            }
                         }
                     } else if (appState.getCurrentState() == AppState.State.EXPECT_RETURN) {
                         double returnThreshold = weightLimit * 0.9;
@@ -642,7 +756,73 @@ public class MainActivity extends AppCompatActivity {
                 tvRawData.setText("📨 Буфер: " + jsonBuffer.toString());
             }
         }
+
+        /**
+         * Обработка данных с использованием CSV таблицы
+         */
+        private void processWithCsvData(double correctedWeight, int correctedDistance, DataModel dataModel, double weightLimit) {
+            DataManager dataManager = DataManager.getInstance();
+
+            if (isTableDataExhausted) {
+                tvStatus.setText("❌ Данные из таблицы закончились!");
+                return;
+            }
+
+            Double csvValue = getCurrentCsvValue();
+
+            if (csvValue == null) {
+                String columnLetter = getColumnLetter(currentColumnIndex);
+                String message = String.format("⚠️ Ячейка %s%d не содержит число или пуста",
+                        columnLetter, currentCsvRowNumber);
+                tvStatus.setText(message);
+                Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
+
+                boolean exhausted = advanceToNextTableCell();
+                if (exhausted) {
+                    tvStatus.setText("❌ Данные из таблицы закончились!");
+                }
+                return;
+            }
+
+            // Вычисляем разницу с таблицей CSV
+            double diff = correctedDistance - csvValue;
+
+            // Добавляем запись - передаем targetWeight (значение из CSV)
+            addLimitDataRecord(correctedWeight, csvValue, correctedDistance, diff, weightLimit);
+
+            String columnLetter = getColumnLetter(currentColumnIndex);
+            String statusMsg = String.format("✅ Записано: %s%d, Diff: %.2f",
+                    columnLetter, currentCsvRowNumber, diff);
+            tvStatus.setText(statusMsg);
+
+            dataModel.setRecorded(true);
+            appState.setDataRecordedForCycle(true);
+
+            currentRowIndex++;
+            currentCsvRowNumber++;
+
+            boolean exhausted = advanceToNextTableCell();
+            if (exhausted) {
+                tvStatus.setText("✅ Все данные из таблицы обработаны!");
+            }
+
+            appState.setState(AppState.State.EXPECT_RETURN);
+        }
     };
+
+    private String getColumnLetter(int index) {
+        StringBuilder sb = new StringBuilder();
+        index++;
+
+        while (index > 0) {
+            index--;
+            char letter = (char) ('A' + (index % 26));
+            sb.insert(0, letter);
+            index = index / 26;
+        }
+
+        return sb.toString();
+    }
 
     private void updateUI(boolean connected) {
         btnScan.setEnabled(!connected);

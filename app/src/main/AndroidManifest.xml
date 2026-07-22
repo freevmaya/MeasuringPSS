@@ -30,7 +30,10 @@
             android:label="Настройки"
             android:parentActivityName=".MainActivity" />
 
-        <activity android:name=".DataTableActivity"
-            android:label="Таблица данных" />
+        <activity
+            android:name=".DataTableActivity"
+            android:label="Таблица данных"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
     </application>
 </manifest>

@@ -4,31 +4,50 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:background="#F5F5F5">
 
-    <Button
-        android:id="@+id/btnLoadCsv"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:layout_marginBottom="16dp"
-        android:text="Загрузить CSV" />
-
-    <HorizontalScrollView
+    <!-- Toolbar с кнопкой назад -->
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="?attr/actionBarSize"
+        android:background="#2196F3"
+        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
+        app:titleTextColor="#FFFFFF"
+        app:navigationIcon="?attr/homeAsUpIndicator" />
 
-        <ScrollView
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <Button
+            android:id="@+id/btnLoadCsv"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="16dp"
+            android:backgroundTint="#2196F3"
+            android:text="Загрузить CSV" />
+
+        <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
-            <TableLayout
-                android:id="@+id/tableData"
+            <ScrollView
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:stretchColumns="*" />
+                android:layout_height="match_parent">
 
-        </ScrollView>
-    </HorizontalScrollView>
+                <TableLayout
+                    android:id="@+id/tableData"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:stretchColumns="*" />
+
+            </ScrollView>
+        </HorizontalScrollView>
+
+    </LinearLayout>
 
 </LinearLayout>
