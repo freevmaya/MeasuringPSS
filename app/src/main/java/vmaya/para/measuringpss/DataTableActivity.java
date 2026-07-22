@@ -192,7 +192,8 @@ public class DataTableActivity extends AppCompatActivity {
                 return;
             }
 
-            DataManager.getInstance().setCsvData(rows, fileName);
+            // Исправлено: передаем uri в DataManager
+            DataManager.getInstance().setCsvData(rows, fileName, uri); // Изменено здесь
             displayTable(rows);
 
             Toast.makeText(this, "Загружено " + rows.size() + " записей из " + fileName, Toast.LENGTH_LONG).show();

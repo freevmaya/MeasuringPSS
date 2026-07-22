@@ -1,6 +1,8 @@
 // app/src/main/java/vmaya/para/measuringpss/DataManager.java
 package vmaya.para.measuringpss;
 
+import android.net.Uri;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -9,6 +11,7 @@ public class DataManager {
     private List<String[]> csvData = new ArrayList<>();
     private boolean isCsvLoaded = false;
     private String currentFileName = "";
+    private Uri currentFileUri = null; // Добавлено поле для хранения URI
 
     private DataManager() {}
 
@@ -19,10 +22,12 @@ public class DataManager {
         return instance;
     }
 
-    public void setCsvData(List<String[]> data, String fileName) {
+    // Обновленный метод с Uri
+    public void setCsvData(List<String[]> data, String fileName, Uri fileUri) {
         this.csvData = new ArrayList<>(data);
         this.isCsvLoaded = true;
         this.currentFileName = fileName;
+        this.currentFileUri = fileUri;
     }
 
     public List<String[]> getCsvData() {
@@ -37,10 +42,15 @@ public class DataManager {
         return currentFileName;
     }
 
+    public Uri getCurrentFileUri() {
+        return currentFileUri;
+    }
+
     public void clearCsvData() {
         csvData.clear();
         isCsvLoaded = false;
         currentFileName = "";
+        currentFileUri = null; // Очищаем URI
     }
 
     /**

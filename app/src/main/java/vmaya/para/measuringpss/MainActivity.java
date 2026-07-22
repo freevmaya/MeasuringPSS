@@ -14,15 +14,20 @@ import android.bluetooth.BluetoothManager;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanResult;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.provider.MediaStore;
 import android.provider.Settings;
 import android.view.View;
 import android.widget.Button;
@@ -40,6 +45,9 @@ import androidx.core.content.ContextCompat;
 
 import com.google.gson.Gson;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -157,11 +165,116 @@ public class MainActivity extends AppCompatActivity {
 
         View btnDataTable = findViewById(R.id.btnDataTable);
         btnDataTable.setOnClickListener(v -> openDataTable());
+
+        Button btnSaveDiff = findViewById(R.id.btnSaveDiff);
+        btnSaveDiff.setOnClickListener(v -> saveDiffData());
     }
 
     private void openDataTable() {
         Intent intent = new Intent(this, DataTableActivity.class);
         startActivity(intent);
+    }
+
+    /**
+     * Сохраняет diff значения из DataSample в CSV файл.
+     * Формат: Ряд, Ном. стропы, Превышение, Расчет, Разница
+     */
+    private void saveDiffData() {
+        DataManager dataManager = DataManager.getInstance();
+
+        // Проверяем, что есть данные для сохранения
+        if (!dataManager.isCsvLoaded() || limitDataList.isEmpty()) {
+            Toast.makeText(this, "Нет данных для сохранения. Загрузите CSV и дождитесь записей.", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        Uri originalUri = dataManager.getCurrentFileUri();
+        if (originalUri == null) {
+            Toast.makeText(this, "Не удалось определить путь к оригинальному файлу.", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        // Формируем новое имя файла
+        String originalFileName = dataManager.getCurrentFileName();
+        String newFileName;
+        if (originalFileName.contains(".")) {
+            int dotIndex = originalFileName.lastIndexOf('.');
+            newFileName = originalFileName.substring(0, dotIndex) + "_diff" + originalFileName.substring(dotIndex);
+        } else {
+            newFileName = originalFileName + "_diff.csv";
+        }
+
+        // Подготавливаем содержимое CSV
+        StringBuilder csvContent = new StringBuilder();
+        csvContent.append("Ряд,Ном. стропы,Превышение,Расчет,Разница\n");
+        for (DataSample sample : limitDataList) {
+            String rowLetter = sample.getColString();
+            String rowIndex = String.valueOf(sample.getRowIndex() + 1);
+            String weightOverLimit = String.valueOf(sample.getWeight());
+            String calculation = String.format("%d - %d", sample.getDistance(), sample.getTargetWeight());
+            String diff = String.format("%.0f", sample.getDiff());
+            csvContent.append(rowLetter).append(",")
+                    .append(rowIndex).append(",")
+                    .append(weightOverLimit).append(",")
+                    .append(calculation).append(",")
+                    .append(diff).append("\n");
+        }
+
+        // Сохраняем файл
+        boolean success = saveFile(newFileName, csvContent.toString());
+
+        if (success) {
+            Toast.makeText(this, "Файл сохранен: " + newFileName, Toast.LENGTH_LONG).show();
+        } else {
+            Toast.makeText(this, "Ошибка при сохранении файла.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /**
+     * Вспомогательный метод для сохранения строки в файл с использованием MediaStore (Android 10+)
+     */
+    private boolean saveFile(String fileName, String content) {
+        ContentResolver resolver = getContentResolver();
+        ContentValues contentValues = new ContentValues();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+            contentValues.put(MediaStore.MediaColumns.MIME_TYPE, "text/csv");
+            contentValues.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+        } else {
+            // Для старых версий записываем в папку Downloads через файловую систему
+            try {
+                java.io.File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                java.io.File file = new java.io.File(downloadsDir, fileName);
+                if (!downloadsDir.exists() && !downloadsDir.mkdirs()) {
+                    return false;
+                }
+                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
+                    fos.write(content.getBytes(StandardCharsets.UTF_8));
+                    return true;
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+                return false;
+            }
+        }
+
+        Uri uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues);
+        if (uri == null) {
+            return false;
+        }
+
+        try (OutputStream os = resolver.openOutputStream(uri)) {
+            if (os == null) {
+                return false;
+            }
+            os.write(content.getBytes(StandardCharsets.UTF_8));
+            return true;
+        } catch (Exception e) {
+            resolver.delete(uri, null, null);
+            e.printStackTrace();
+            return false;
+        }
     }
 
     private void openSettings() {
