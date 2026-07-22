@@ -27,6 +27,8 @@ import android.provider.Settings;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ScrollView;
+import android.widget.TableLayout;
+import android.widget.TableRow;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -57,14 +59,13 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvStatus;
     private TextView tvWeightDistance;
     private TextView tvRawData;
-    private TextView tvLimitData;
+    private TableLayout tableLimitData;
     private ScrollView limitDataScrollView;
     private Button btnScan;
     private Button btnConnect;
     private Button btnDisconnect;
     private Button btnSettings;
     private Button btnClear;
-    // Удален Spinner
 
     private Gson gson = new Gson();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -75,13 +76,15 @@ public class MainActivity extends AppCompatActivity {
 
     // Список для хранения записей предельных данных
     private final List<DataSample> limitDataList = new ArrayList<>();
-    private int recordCounter = 0;
 
     // Для работы с CSV таблицей
     private int currentRowIndex = 0;
     private int currentColumnIndex = 0;
     private boolean isTableDataExhausted = false;
     private int currentCsvRowNumber = 1;
+
+    // Счетчик номера стропы в текущем ряду
+    private int currentRowIndexCounter = 1;
 
     private static final int REQUEST_PERMISSIONS = 1;
 
@@ -112,7 +115,7 @@ public class MainActivity extends AppCompatActivity {
         tvStatus = findViewById(R.id.tvStatus);
         tvWeightDistance = findViewById(R.id.tvWeightDistance);
         tvRawData = findViewById(R.id.tvRawData);
-        tvLimitData = findViewById(R.id.tvLimitData);
+        tableLimitData = findViewById(R.id.tableLimitData);
         limitDataScrollView = findViewById(R.id.limitDataScrollView);
         btnScan = findViewById(R.id.btnScan);
         btnConnect = findViewById(R.id.btnConnect);
@@ -156,9 +159,6 @@ public class MainActivity extends AppCompatActivity {
         // Устанавливаем начальный статус
         tvStatus.setText("⏳ Ожидание превышения веса...");
 
-        // Обновляем отображение списка
-        updateLimitDataDisplay();
-
         View btnDataTable = findViewById(R.id.btnDataTable);
         btnDataTable.setOnClickListener(v -> openDataTable());
     }
@@ -189,52 +189,152 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Обновляет отображение списка предельных данных в tvLimitData
-     * и автоматически прокручивает вниз
+     * Обновляет таблицу предельных данных
+     * Колонки:
+     * Ряд - буква колонки из CSV (A, B, C, D, E)
+     * Ном. стропы - номер строки в пределах текущего ряда (1, 2, 3, ...)
+     * Превышение - разница между измеренным весом и предельным
+     * Расчет - строка: "Измеренная длина - Требуемая длина"
+     * Разница - числовое значение diff
      */
-    private void updateLimitDataDisplay() {
-        StringBuilder displayText = new StringBuilder("📋 Предельные данные:");
+    private void updateLimitDataTable() {
+        tableLimitData.removeAllViews();
+
+        // Всегда показываем 5 колонок
+        String[] headers = {"Ряд", "Ном", "Прев", "Расч", "Разн"};
+        addTableRow(headers, true);
 
         if (limitDataList.isEmpty()) {
-            displayText.append("\nНет данных");
-        } else {
-            for (DataSample sample : limitDataList) {
-                displayText.append("\n").append(sample.toString());
-            }
+            String[] emptyRow = {"", "", "", "", ""};
+            addTableRow(emptyRow, false);
+            return;
         }
 
-        tvLimitData.setText(displayText.toString());
+        DataManager dataManager = DataManager.getInstance();
+        boolean hasCsvData = dataManager.isCsvLoaded();
 
-        // Автоматическая прокрутка вниз
+        for (DataSample sample : limitDataList) {
+            // Ряд - буква колонки из CSV (A, B, C, D, E)
+            String rowLetter;
+            if (hasCsvData && sample.getRow() >= 1 && sample.getRow() <= 5) {
+                switch (sample.getRow()) {
+                    case 1: rowLetter = "A"; break;
+                    case 2: rowLetter = "B"; break;
+                    case 3: rowLetter = "C"; break;
+                    case 4: rowLetter = "D"; break;
+                    case 5: rowLetter = "E"; break;
+                    default: rowLetter = "?";
+                }
+            } else {
+                rowLetter = "";
+            }
+
+            // Ном. стропы - номер в пределах ряда
+            String rowIndex = hasCsvData ? String.valueOf(sample.getRowIndex()) : "";
+
+            // Превышение
+            String weightOverLimit = String.valueOf(sample.getWeight());
+
+            // Расчет: "Измеренная длина - Требуемая длина"
+            String calculation;
+            if (hasCsvData) {
+                int measuredDistance = sample.getDistance();
+                int requiredDistance = sample.getTargetWeight();
+                calculation = String.format("%d - %d", measuredDistance, requiredDistance);
+            } else {
+                calculation = "";
+            }
+
+            // Разница
+            String diffValue = hasCsvData ? String.format("%.0f", sample.getDiff()) : "";
+
+            String[] rowData = new String[]{
+                    rowLetter,       // Ряд
+                    rowIndex,        // Ном. стропы
+                    weightOverLimit, // Превышение
+                    calculation,     // Расчет
+                    diffValue        // Разница
+            };
+            addTableRow(rowData, false);
+        }
+
         limitDataScrollView.post(() -> {
             limitDataScrollView.fullScroll(View.FOCUS_DOWN);
         });
     }
 
     /**
+     * Добавляет строку в таблицу
+     */
+    private void addTableRow(String[] columns, boolean isHeader) {
+        TableRow tableRow = new TableRow(this);
+        tableRow.setLayoutParams(new TableRow.LayoutParams(
+                TableRow.LayoutParams.MATCH_PARENT,
+                TableRow.LayoutParams.WRAP_CONTENT
+        ));
+
+        for (String column : columns) {
+            TextView textView = new TextView(this);
+            textView.setText(column != null ? column : "");
+            textView.setPadding(12, 8, 12, 8);
+            textView.setMaxLines(1);
+            textView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
+            if (isHeader) {
+                textView.setBackgroundColor(getResources().getColor(android.R.color.darker_gray));
+                textView.setTextColor(getResources().getColor(android.R.color.white));
+                textView.setTextSize(16);
+                textView.setTypeface(null, android.graphics.Typeface.BOLD);
+            } else {
+                int position = tableLimitData.getChildCount();
+                if (position % 2 == 1) {
+                    textView.setBackgroundColor(0xFFF5F5F5);
+                } else {
+                    textView.setBackgroundColor(0xFFFFFFFF);
+                }
+            }
+            tableRow.addView(textView);
+        }
+
+        if (!isHeader) {
+            View divider = new View(this);
+            divider.setLayoutParams(new TableRow.LayoutParams(
+                    TableRow.LayoutParams.MATCH_PARENT,
+                    1
+            ));
+            divider.setBackgroundColor(0xFFE0E0E0);
+            tableRow.addView(divider);
+        }
+
+        tableLimitData.addView(tableRow);
+    }
+
+    /**
      * Добавляет новую запись в список предельных данных
-     * @param rowValue значение ряда (1 = A, 2 = B, 3 = C, 4 = D, 5 = E)
-     * @param correctedWeight скорректированный вес с датчика (округляется до int)
-     * @param targetWeight значение из CSV таблицы (потребная длина) - округляется до int
+     * @param correctedWeight скорректированный вес с датчика
+     * @param targetWeight значение из CSV таблицы (потребная длина)
      * @param distance скорректированное расстояние
      * @param diff разница с таблицей CSV
      * @param weightLimit текущий предел веса
      */
-    private void addLimitDataRecord(int rowValue, double correctedWeight, double targetWeight, int distance, double diff, double weightLimit) {
-        recordCounter++;
+    private void addLimitDataRecord(double correctedWeight, double targetWeight, int distance, double diff, double weightLimit) {
 
-        // Сохраняем разницу с пределом веса (превышение) - округляем до целого
         int weightOverLimit = (int) Math.round(correctedWeight - weightLimit);
         int targetWeightInt = (int) Math.round(targetWeight);
 
-        DataSample sample = new DataSample(recordCounter, rowValue, weightOverLimit, targetWeightInt, distance, diff);
+        // Создаем запись с номером стропы в пределах ряда
+        DataSample sample = new DataSample(currentCsvRowNumber, currentColumnIndex + 1, currentRowIndexCounter,
+                weightOverLimit, targetWeightInt, distance, diff);
         limitDataList.add(sample);
-        updateLimitDataDisplay();
+
+        // Увеличиваем счетчик стропы для следующей записи в этом же ряду
+        currentRowIndexCounter++;
+
+        updateLimitDataTable();
     }
 
     /**
      * Удаляет последнюю запись из списка предельных данных
-     * Также уменьшает счетчик записей, чтобы нумерация была последовательной
      */
     private void clearLimitData() {
         if (limitDataList.isEmpty()) {
@@ -242,14 +342,28 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        // Получаем удаляемую запись
+        DataSample removedSample = limitDataList.get(limitDataList.size() - 1);
+
         // Удаляем последнюю запись
         limitDataList.remove(limitDataList.size() - 1);
-        // Уменьшаем счетчик записей
-        if (recordCounter > 0) {
-            recordCounter--;
-        }
-        updateLimitDataDisplay();
+
+        // Восстанавливаем счетчик стропы из удаленной записи
+        // Если удаляемая запись была последней в своем ряду,
+        // то счетчик должен стать на единицу меньше
+        currentRowIndexCounter = removedSample.getRowIndex();
+        currentCsvRowNumber = removedSample.getRowIndex() - 1;
+        currentColumnIndex = removedSample.getRow() - 1;
+
+        updateLimitDataTable();
         Toast.makeText(this, "Последняя запись удалена", Toast.LENGTH_SHORT).show();
+    }
+
+    /**
+     * Сбрасывает счетчик стропы при смене ряда
+     */
+    private void resetRowIndexCounter() {
+        currentRowIndexCounter = 1;
     }
 
     private void checkPermissions() {
@@ -521,6 +635,7 @@ public class MainActivity extends AppCompatActivity {
         currentColumnIndex = 0;
         isTableDataExhausted = false;
         currentCsvRowNumber = 1;
+        currentRowIndexCounter = 1;
     }
 
     private boolean advanceToNextTableCell() {
@@ -754,7 +869,7 @@ public class MainActivity extends AppCompatActivity {
                         if (dataManager.isCsvLoaded()) {
                             processWithCsvData(correctedWeight, correctedDistance, dataModel, weightLimit);
                         } else {
-                            addLimitDataRecord(0, correctedWeight, 0.0, correctedDistance, 0.0, weightLimit);
+                            addLimitDataRecord(correctedWeight, 0.0, correctedDistance, 0.0, weightLimit);
                             dataModel.setRecorded(true);
                             appState.setDataRecordedForCycle(true);
                             appState.setState(AppState.State.EXPECT_RETURN);
@@ -830,15 +945,25 @@ public class MainActivity extends AppCompatActivity {
             double diff = correctedDistance - csvValue;
 
             // Определяем ряд: 0 = A, 1 = B, 2 = C, 3 = D, 4 = E
-            // Добавляем +1, чтобы в DataSample было 1 = A, 2 = B, 3 = C, 4 = D, 5 = E
             int rowValue = currentColumnIndex + 1;
 
-            // Добавляем запись - передаем targetWeight (значение из CSV)
-            addLimitDataRecord(rowValue, correctedWeight, csvValue, correctedDistance, diff, weightLimit);
+            // Проверяем, сменился ли ряд
+            // Если это первая запись или ряд изменился - сбрасываем счетчик стропы
+            if (!limitDataList.isEmpty()) {
+                DataSample lastSample = limitDataList.get(limitDataList.size() - 1);
+                if (lastSample.getRow() != rowValue) {
+                    resetRowIndexCounter();
+                }
+            } else {
+                resetRowIndexCounter();
+            }
+
+            // Добавляем запись
+            addLimitDataRecord(correctedWeight, csvValue, correctedDistance, diff, weightLimit);
 
             String columnLetter = getColumnLetter(currentColumnIndex);
-            String statusMsg = String.format("✅ Записано: %s%d (Ряд %d), Diff: %.2f",
-                    columnLetter, currentCsvRowNumber, rowValue, diff);
+            String statusMsg = String.format("✅ Записано: %s%d (Ряд %d, Стропа %d), Diff: %.2f",
+                    columnLetter, currentCsvRowNumber, rowValue, currentRowIndexCounter - 1, diff);
             tvStatus.setText(statusMsg);
 
             dataModel.setRecorded(true);

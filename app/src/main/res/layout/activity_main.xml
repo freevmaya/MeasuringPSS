@@ -1,205 +1,141 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F5F5F5"
+    android:orientation="vertical"
     android:padding="16dp">
 
-    <!-- Заголовок с кнопкой настроек -->
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/titleLayout"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="#2196F3"
-        android:padding="4dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="?attr/colorPrimary"
+        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
+        app:popupTheme="@style/ThemeOverlay.AppCompat.Light" />
 
-        <TextView
-            android:id="@+id/titleTextView"
+    <!-- Статус -->
+    <TextView
+        android:id="@+id/tvStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="⏳ Ожидание превышения веса..."
+        android:textSize="16sp"
+        android:padding="8dp" />
+
+    <!-- Вес и расстояние -->
+    <TextView
+        android:id="@+id/tvWeightDistance"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="⚖️: --, 📏: --"
+        android:textSize="18sp"
+        android:padding="8dp"
+        android:textStyle="bold" />
+
+    <!-- RAW данные -->
+    <TextView
+        android:id="@+id/tvRawData"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="📨 Ожидание данных..."
+        android:textSize="14sp"
+        android:padding="8dp"
+        android:maxLines="2"
+        android:ellipsize="end" />
+
+    <!-- Кнопки управления -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
+
+        <Button
+            android:id="@+id/btnScan"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:text="Замер стропной параплана"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/btnSettings"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            android:layout_weight="1"
+            android:text="🔍"
+            android:textSize="24sp"
+            android:layout_marginEnd="4dp" />
+
+        <Button
+            android:id="@+id/btnConnect"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🔗"
+            android:textSize="24sp"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp" />
+
+        <Button
+            android:id="@+id/btnDisconnect"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="❌"
+            android:textSize="24sp"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp" />
+
+        <Button
+            android:id="@+id/btnClear"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🗑️"
+            android:textSize="24sp"
+            android:layout_marginStart="4dp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="4dp">
 
         <Button
             android:id="@+id/btnSettings"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:background="@drawable/ic_settings"
-            android:backgroundTint="#FFFFFF"
-            android:contentDescription="Настройки"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:padding="8dp"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
-
-    </androidx.constraintlayout.widget.ConstraintLayout>
-
-    <!-- Статус подключения -->
-    <TextView
-        android:id="@+id/tvStatus"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="#E3F2FD"
-        android:padding="12dp"
-        android:text="🔵 Ожидание"
-        android:textSize="16sp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/titleLayout" />
-
-    <!-- Объединённые данные с датчиков -->
-    <TextView
-        android:id="@+id/tvWeightDistance"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="#FFFFFF"
-        android:padding="12dp"
-        android:text="⚖️ Вес: --, 📏 Расст: --"
-        android:textSize="18sp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvStatus" />
-
-    <!-- ScrollView для предельных данных -->
-    <ScrollView
-        android:id="@+id/limitDataScrollView"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="16dp"
-        android:background="#f0f0f0"
-        app:layout_constraintBottom_toTopOf="@id/bottomGroup"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvWeightDistance">
-
-        <TextView
-            android:id="@+id/tvLimitData"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:minHeight="100dp"
-            android:padding="8dp"
-            android:text="📋 Предельные данные:"
-            android:textSize="14sp" />
-    </ScrollView>
+            android:layout_weight="1"
+            android:text="⚙️"
+            android:textSize="24sp"
+            android:layout_marginEnd="4dp" />
 
-    <!-- Нижняя закреплённая группа -->
-    <LinearLayout
-        android:id="@+id/bottomGroup"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
-
-        <!-- Сырые данные -->
-        <TextView
-            android:id="@+id/tvRawData"
-            android:layout_width="match_parent"
+        <Button
+            android:id="@+id/btnDataTable"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:background="#FFF3E0"
-            android:minHeight="60dp"
-            android:padding="12dp"
-            android:text="📨 Ожидание данных..."
-            android:textSize="14sp" />
-
-        <!-- Кнопки управления -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="horizontal"
-            android:weightSum="5">
-
-            <Button
-                android:id="@+id/btnScan"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_marginEnd="4dp"
-                android:layout_weight="1"
-                android:backgroundTint="#808080"
-                android:padding="4dp"
-                android:text="🔍"
-                android:textSize="24sp"
-                android:textColor="#FFFFFF"
-                android:contentDescription="Сканировать" />
-
-            <Button
-                android:id="@+id/btnConnect"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_marginEnd="4dp"
-                android:layout_weight="1"
-                android:backgroundTint="#808080"
-                android:enabled="false"
-                android:padding="4dp"
-                android:text="🔗"
-                android:textSize="24sp"
-                android:textColor="#FFFFFF"
-                android:contentDescription="Подключить" />
-
-            <Button
-                android:id="@+id/btnDisconnect"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_marginEnd="4dp"
-                android:layout_weight="1"
-                android:backgroundTint="#808080"
-                android:enabled="false"
-                android:padding="4dp"
-                android:text="⛔"
-                android:textSize="24sp"
-                android:textColor="#FFFFFF"
-                android:contentDescription="Отключить" />
-
-            <Button
-                android:id="@+id/btnClear"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:backgroundTint="#808080"
-                android:padding="4dp"
-                android:text="🗑️"
-                android:textSize="24sp"
-                android:textColor="#FFFFFF"
-                android:contentDescription="Удалить" />
-
-            <Button
-                android:id="@+id/btnDataTable"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:backgroundTint="#808080"
-                android:padding="4dp"
-                android:text="📊"
-                android:textSize="24sp"
-                android:textColor="#FFFFFF"
-                android:contentDescription="Данные" />
-        </LinearLayout>
-
-        <!-- Информация -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:background="#ECEFF1"
-            android:padding="12dp"
-            android:text="📌 Инструкция:\n1. Нажмите 'Сканировать'\n2. Выберите устройство 'Measuring PSS'\n3. Нажмите 'Подключить'\n4. Данные появятся автоматически"
-            android:textSize="14sp" />
+            android:layout_weight="1"
+            android:text="📊"
+            android:textSize="24sp"
+            android:layout_marginStart="4dp" />
     </LinearLayout>
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    <!-- Предельные данные -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="📋 Предельные данные:"
+        android:textStyle="bold"
+        android:layout_marginTop="16dp" />
+
+    <ScrollView
+        android:id="@+id/limitDataScrollView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <TableLayout
+            android:id="@+id/tableLimitData"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:stretchColumns="*" />
+
+    </ScrollView>
+
+</LinearLayout>
