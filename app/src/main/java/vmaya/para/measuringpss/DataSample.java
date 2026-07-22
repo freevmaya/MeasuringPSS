@@ -96,9 +96,10 @@ public class DataSample {
             case 5: rowLetter = "E"; break;
             default: rowLetter = "?"; break;
         }
-        // Формат: A, 5, 25г, 100 -150, разница: 25.50 мм
-        // weight и targetWeight - целые числа, diff - дробное
-        return String.format("%s, %d, %dг, %d -%d, разница: %.0f мм",
-                rowLetter, num, weight, targetWeight, distance, diff);
+        if (diff != 0)
+            return String.format("%s, %d, %d г, %d - %d, разница: %.0f мм",
+                    rowLetter, num, weight, targetWeight, distance, diff);
+        else return String.format("%s, %d, %d г, %d мм",
+                rowLetter, num, weight, distance);
     }
 }

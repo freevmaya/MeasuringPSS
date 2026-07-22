@@ -22,12 +22,11 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.view.View;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ScrollView;
-import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -41,7 +40,6 @@ import com.google.gson.Gson;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity {
@@ -66,7 +64,7 @@ public class MainActivity extends AppCompatActivity {
     private Button btnDisconnect;
     private Button btnSettings;
     private Button btnClear;
-    private Spinner spinnerRow;
+    // Удален Spinner
 
     private Gson gson = new Gson();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -91,10 +89,21 @@ public class MainActivity extends AppCompatActivity {
     private AppSettings appSettings;
     private AppState appState = new AppState();
 
+    private PowerManager.WakeLock wakeLock;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        if (powerManager != null) {
+            wakeLock = powerManager.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                    "MeasuringPSS::WakeLock"
+            );
+            wakeLock.acquire(10 * 60 * 1000L /* 10 минут */);
+        }
 
         // Инициализация настроек
         appSettings = new AppSettings(this);
@@ -110,13 +119,6 @@ public class MainActivity extends AppCompatActivity {
         btnDisconnect = findViewById(R.id.btnDisconnect);
         btnSettings = findViewById(R.id.btnSettings);
         btnClear = findViewById(R.id.btnClear);
-        spinnerRow = findViewById(R.id.spinnerRow);
-
-        // Настройка Spinner
-        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(this,
-                R.array.row_array, android.R.layout.simple_spinner_item);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinnerRow.setAdapter(adapter);
 
         // Применение настроек
         updateUIFromSettings();
@@ -211,25 +213,15 @@ public class MainActivity extends AppCompatActivity {
 
     /**
      * Добавляет новую запись в список предельных данных
+     * @param rowValue значение ряда (1 = A, 2 = B, 3 = C, 4 = D, 5 = E)
      * @param correctedWeight скорректированный вес с датчика (округляется до int)
      * @param targetWeight значение из CSV таблицы (потребная длина) - округляется до int
      * @param distance скорректированное расстояние
      * @param diff разница с таблицей CSV
      * @param weightLimit текущий предел веса
      */
-    private void addLimitDataRecord(double correctedWeight, double targetWeight, int distance, double diff, double weightLimit) {
+    private void addLimitDataRecord(int rowValue, double correctedWeight, double targetWeight, int distance, double diff, double weightLimit) {
         recordCounter++;
-        // Получаем выбранный ряд из Spinner
-        String selectedRow = spinnerRow.getSelectedItem().toString();
-        int rowValue = 0;
-        switch (selectedRow) {
-            case "A": rowValue = 1; break;
-            case "B": rowValue = 2; break;
-            case "C": rowValue = 3; break;
-            case "D": rowValue = 4; break;
-            case "E": rowValue = 5; break;
-            default: rowValue = 1;
-        }
 
         // Сохраняем разницу с пределом веса (превышение) - округляем до целого
         int weightOverLimit = (int) Math.round(correctedWeight - weightLimit);
@@ -372,8 +364,8 @@ public class MainActivity extends AppCompatActivity {
         }
 
         isScanning = true;
-        btnScan.setText("");
-        tvStatus.setText("🔍 Поиск устройств...");
+
+        btnScan.setText("⏹️");
         btnScan.setEnabled(true);
 
         bleScanner.startScan(scanCallback);
@@ -396,7 +388,7 @@ public class MainActivity extends AppCompatActivity {
                 e.printStackTrace();
             }
             isScanning = false;
-            btnScan.setText("");
+            btnScan.setText("🔍");
         }
     }
 
@@ -693,68 +685,118 @@ public class MainActivity extends AppCompatActivity {
 
         private void processJsonBuffer() {
             String buffer = jsonBuffer.toString();
+
+            // Если буфер пуст, выходим
+            if (buffer.isEmpty()) {
+                return;
+            }
+
+            // Пытаемся найти и извлечь валидный JSON объект
             int startIndex = buffer.indexOf("{");
+            int endIndex = -1;
+            String validJson = null;
 
             while (startIndex != -1) {
-                int endIndex = buffer.indexOf("}", startIndex + 1);
+                // Ищем закрывающую скобку
+                endIndex = findMatchingBrace(buffer, startIndex);
 
                 if (endIndex == -1) {
+                    // Нет завершенного JSON - оставляем в буфере и выходим
                     break;
                 }
 
-                String fullJson = buffer.substring(startIndex, endIndex + 1);
-                tvRawData.setText("📨 RAW: " + fullJson);
+                String potentialJson = buffer.substring(startIndex, endIndex + 1);
 
+                // Проверяем, является ли это валидным JSON
                 try {
-                    DataModel dataModel = gson.fromJson(fullJson, DataModel.class);
+                    gson.fromJson(potentialJson, DataModel.class);
+                    validJson = potentialJson;
+                    break;
+                } catch (Exception e) {
+                    // Этот кусок невалидный - ищем следующий JSON объект
+                    startIndex = buffer.indexOf("{", startIndex + 1);
+                }
+            }
 
-                    double weightCf = appSettings.getWeightCf();
-                    int distanceAdd = appSettings.getDistanceAdd();
-                    double weightLimit = appSettings.getWeightLimit();
+            if (validJson == null) {
+                // Не нашли валидный JSON - очищаем буфер, чтобы не накапливать мусор
+                if (buffer.length() > 1000) {
+                    // Если буфер слишком большой, очищаем его
+                    jsonBuffer.setLength(0);
+                    tvRawData.setText("📨 Буфер очищен (слишком большой)");
+                }
+                return;
+            }
 
-                    double correctedWeight = dataModel.getWeight() * weightCf;
-                    int correctedDistance = dataModel.getDistance() + distanceAdd;
+            // Удаляем обработанный JSON из буфера вместе со всем мусором до него
+            int processedEnd = buffer.indexOf(validJson) + validJson.length();
+            jsonBuffer.delete(0, processedEnd);
 
-                    tvWeightDistance.setText(String.format("⚖️: %.2f г, 📏: %d мм", correctedWeight, correctedDistance));
+            // Парсим валидный JSON
+            tvRawData.setText("📨 RAW: " + validJson);
 
-                    if (appState.getCurrentState() == AppState.State.EXPECT_DATA) {
-                        if (correctedWeight > weightLimit && !appState.isDataRecordedForCycle()) {
-                            DataManager dataManager = DataManager.getInstance();
+            try {
+                DataModel dataModel = gson.fromJson(validJson, DataModel.class);
 
-                            if (dataManager.isCsvLoaded()) {
-                                processWithCsvData(correctedWeight, correctedDistance, dataModel, weightLimit);
-                            } else {
-                                // Работаем по старой логике без CSV
-                                addLimitDataRecord(correctedWeight, 0.0, correctedDistance, 0.0, weightLimit);
-                                dataModel.setRecorded(true);
-                                appState.setDataRecordedForCycle(true);
-                                appState.setState(AppState.State.EXPECT_RETURN);
-                                tvStatus.setText("⏳ Ожидание снижения веса...");
-                            }
-                        }
-                    } else if (appState.getCurrentState() == AppState.State.EXPECT_RETURN) {
-                        double returnThreshold = weightLimit * 0.9;
-                        if (correctedWeight < returnThreshold) {
-                            appState.setState(AppState.State.EXPECT_DATA);
-                            tvStatus.setText("⏳ Ожидание превышения веса...");
+                double weightCf = appSettings.getWeightCf();
+                int distanceAdd = appSettings.getDistanceAdd();
+                double weightLimit = appSettings.getWeightLimit();
+
+                double correctedWeight = dataModel.getWeight() * weightCf;
+                int correctedDistance = dataModel.getDistance() + distanceAdd;
+
+                tvWeightDistance.setText(String.format("⚖️: %.2f г, 📏: %d мм", correctedWeight, correctedDistance));
+
+                if (appState.getCurrentState() == AppState.State.EXPECT_DATA) {
+                    if (correctedWeight > weightLimit && !appState.isDataRecordedForCycle()) {
+                        DataManager dataManager = DataManager.getInstance();
+
+                        if (dataManager.isCsvLoaded()) {
+                            processWithCsvData(correctedWeight, correctedDistance, dataModel, weightLimit);
+                        } else {
+                            addLimitDataRecord(0, correctedWeight, 0.0, correctedDistance, 0.0, weightLimit);
+                            dataModel.setRecorded(true);
+                            appState.setDataRecordedForCycle(true);
+                            appState.setState(AppState.State.EXPECT_RETURN);
+                            tvStatus.setText("⏳ Ожидание снижения веса...");
                         }
                     }
-
-                } catch (Exception e) {
-                    tvWeightDistance.setText("⚠️ Ошибка парсинга: " + e.getMessage());
-                    e.printStackTrace();
+                } else if (appState.getCurrentState() == AppState.State.EXPECT_RETURN) {
+                    double returnThreshold = weightLimit * 0.9;
+                    if (correctedWeight < returnThreshold) {
+                        appState.setState(AppState.State.EXPECT_DATA);
+                        tvStatus.setText("⏳ Ожидание превышения веса...");
+                    }
                 }
 
-                buffer = buffer.substring(endIndex + 1);
-                startIndex = buffer.indexOf("{");
+            } catch (Exception e) {
+                tvWeightDistance.setText("⚠️ Ошибка парсинга: " + e.getMessage());
+                e.printStackTrace();
+                // Если парсинг упал, пробуем найти следующий JSON в оставшемся буфере
+                // Рекурсивно вызываем этот же метод для обработки остатка
+                if (jsonBuffer.length() > 0) {
+                    processJsonBuffer();
+                }
             }
+        }
 
-            jsonBuffer.setLength(0);
-            jsonBuffer.append(buffer);
-
-            if (jsonBuffer.length() > 0) {
-                tvRawData.setText("📨 Буфер: " + jsonBuffer.toString());
+        /**
+         * Находит позицию закрывающей скобки, соответствующей открывающей на позиции start
+         */
+        private int findMatchingBrace(String buffer, int start) {
+            int depth = 0;
+            for (int i = start; i < buffer.length(); i++) {
+                char c = buffer.charAt(i);
+                if (c == '{') {
+                    depth++;
+                } else if (c == '}') {
+                    depth--;
+                    if (depth == 0) {
+                        return i;
+                    }
+                }
             }
+            return -1;
         }
 
         /**
@@ -787,12 +829,16 @@ public class MainActivity extends AppCompatActivity {
             // Вычисляем разницу с таблицей CSV
             double diff = correctedDistance - csvValue;
 
+            // Определяем ряд: 0 = A, 1 = B, 2 = C, 3 = D, 4 = E
+            // Добавляем +1, чтобы в DataSample было 1 = A, 2 = B, 3 = C, 4 = D, 5 = E
+            int rowValue = currentColumnIndex + 1;
+
             // Добавляем запись - передаем targetWeight (значение из CSV)
-            addLimitDataRecord(correctedWeight, csvValue, correctedDistance, diff, weightLimit);
+            addLimitDataRecord(rowValue, correctedWeight, csvValue, correctedDistance, diff, weightLimit);
 
             String columnLetter = getColumnLetter(currentColumnIndex);
-            String statusMsg = String.format("✅ Записано: %s%d, Diff: %.2f",
-                    columnLetter, currentCsvRowNumber, diff);
+            String statusMsg = String.format("✅ Записано: %s%d (Ряд %d), Diff: %.2f",
+                    columnLetter, currentCsvRowNumber, rowValue, diff);
             tvStatus.setText(statusMsg);
 
             dataModel.setRecorded(true);
@@ -829,6 +875,10 @@ public class MainActivity extends AppCompatActivity {
         btnConnect.setEnabled(!connected && currentDevice != null);
         btnDisconnect.setEnabled(connected);
 
+        if (!connected && !isScanning) {
+            btnScan.setText("🔍");
+        }
+
         if (!connected) {
             tvWeightDistance.setText("⚖️: --, 📏: --");
             tvRawData.setText("📨 Ожидание данных...");
@@ -838,6 +888,10 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        // Освобождаем блокировку, чтобы экран мог гаснуть
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release();
+        }
         stopScan();
         disconnectDevice();
     }
