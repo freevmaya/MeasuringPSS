@@ -81,10 +81,6 @@ public class MainActivity extends AppCompatActivity {
     private int currentRowIndex = 0;
     private int currentColumnIndex = 0;
     private boolean isTableDataExhausted = false;
-    private int currentCsvRowNumber = 1;
-
-    // Счетчик номера стропы в текущем ряду
-    private int currentRowIndexCounter = 1;
 
     private static final int REQUEST_PERMISSIONS = 1;
 
@@ -215,22 +211,10 @@ public class MainActivity extends AppCompatActivity {
 
         for (DataSample sample : limitDataList) {
             // Ряд - буква колонки из CSV (A, B, C, D, E)
-            String rowLetter;
-            if (hasCsvData && sample.getRow() >= 1 && sample.getRow() <= 5) {
-                switch (sample.getRow()) {
-                    case 1: rowLetter = "A"; break;
-                    case 2: rowLetter = "B"; break;
-                    case 3: rowLetter = "C"; break;
-                    case 4: rowLetter = "D"; break;
-                    case 5: rowLetter = "E"; break;
-                    default: rowLetter = "?";
-                }
-            } else {
-                rowLetter = "";
-            }
+            String rowLetter = sample.getColString();
 
             // Ном. стропы - номер в пределах ряда
-            String rowIndex = hasCsvData ? String.valueOf(sample.getRowIndex()) : "";
+            String rowIndex = hasCsvData ? String.valueOf(sample.getRowIndex() + 1) : "";
 
             // Превышение
             String weightOverLimit = String.valueOf(sample.getWeight());
@@ -322,13 +306,11 @@ public class MainActivity extends AppCompatActivity {
         int weightOverLimit = (int) Math.round(correctedWeight - weightLimit);
         int targetWeightInt = (int) Math.round(targetWeight);
 
+
         // Создаем запись с номером стропы в пределах ряда
-        DataSample sample = new DataSample(currentCsvRowNumber, currentColumnIndex + 1, currentRowIndexCounter,
+        DataSample sample = new DataSample(currentColumnIndex, currentRowIndex,
                 weightOverLimit, targetWeightInt, distance, diff);
         limitDataList.add(sample);
-
-        // Увеличиваем счетчик стропы для следующей записи в этом же ряду
-        currentRowIndexCounter++;
 
         updateLimitDataTable();
     }
@@ -338,32 +320,22 @@ public class MainActivity extends AppCompatActivity {
      */
     private void clearLimitData() {
         if (limitDataList.isEmpty()) {
-            Toast.makeText(this, "Нет данных для удаления", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        // Получаем удаляемую запись
-        DataSample removedSample = limitDataList.get(limitDataList.size() - 1);
+        DataSample last = limitDataList.get(limitDataList.size() - 1);
 
         // Удаляем последнюю запись
         limitDataList.remove(limitDataList.size() - 1);
 
-        // Восстанавливаем счетчик стропы из удаленной записи
-        // Если удаляемая запись была последней в своем ряду,
-        // то счетчик должен стать на единицу меньше
-        currentRowIndexCounter = removedSample.getRowIndex();
-        currentCsvRowNumber = removedSample.getRowIndex() - 1;
-        currentColumnIndex = removedSample.getRow() - 1;
+        if (currentRowIndex > 0)
+            currentRowIndex--;
+        else if (currentColumnIndex > 0) {
+            currentRowIndex = last.getRowIndex();
+            currentColumnIndex--;
+        }
 
         updateLimitDataTable();
-        Toast.makeText(this, "Последняя запись удалена", Toast.LENGTH_SHORT).show();
-    }
-
-    /**
-     * Сбрасывает счетчик стропы при смене ряда
-     */
-    private void resetRowIndexCounter() {
-        currentRowIndexCounter = 1;
     }
 
     private void checkPermissions() {
@@ -634,8 +606,6 @@ public class MainActivity extends AppCompatActivity {
         currentRowIndex = 0;
         currentColumnIndex = 0;
         isTableDataExhausted = false;
-        currentCsvRowNumber = 1;
-        currentRowIndexCounter = 1;
     }
 
     private boolean advanceToNextTableCell() {
@@ -656,7 +626,6 @@ public class MainActivity extends AppCompatActivity {
         if (currentRowIndex >= rowCount) {
             currentRowIndex = 0;
             currentColumnIndex++;
-            currentCsvRowNumber = 1;
 
             if (currentColumnIndex >= columnCount) {
                 isTableDataExhausted = true;
@@ -689,7 +658,6 @@ public class MainActivity extends AppCompatActivity {
                 if (value != null && !value.trim().isEmpty()) {
                     currentRowIndex = row;
                     currentColumnIndex = col;
-                    currentCsvRowNumber = row + 1;
                     return false;
                 }
             }
@@ -716,10 +684,6 @@ public class MainActivity extends AppCompatActivity {
         } catch (NumberFormatException e) {
             return null;
         }
-    }
-
-    private int getCurrentRowNumber() {
-        return currentCsvRowNumber;
     }
 
     private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
@@ -930,7 +894,7 @@ public class MainActivity extends AppCompatActivity {
             if (csvValue == null) {
                 String columnLetter = getColumnLetter(currentColumnIndex);
                 String message = String.format("⚠️ Ячейка %s%d не содержит число или пуста",
-                        columnLetter, currentCsvRowNumber);
+                        columnLetter, currentRowIndex);
                 tvStatus.setText(message);
                 Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
 
@@ -945,32 +909,20 @@ public class MainActivity extends AppCompatActivity {
             double diff = correctedDistance - csvValue;
 
             // Определяем ряд: 0 = A, 1 = B, 2 = C, 3 = D, 4 = E
-            int rowValue = currentColumnIndex + 1;
-
-            // Проверяем, сменился ли ряд
-            // Если это первая запись или ряд изменился - сбрасываем счетчик стропы
-            if (!limitDataList.isEmpty()) {
-                DataSample lastSample = limitDataList.get(limitDataList.size() - 1);
-                if (lastSample.getRow() != rowValue) {
-                    resetRowIndexCounter();
-                }
-            } else {
-                resetRowIndexCounter();
-            }
+            int colValue = currentColumnIndex + 1;
 
             // Добавляем запись
             addLimitDataRecord(correctedWeight, csvValue, correctedDistance, diff, weightLimit);
 
             String columnLetter = getColumnLetter(currentColumnIndex);
             String statusMsg = String.format("✅ Записано: %s%d (Ряд %d, Стропа %d), Diff: %.2f",
-                    columnLetter, currentCsvRowNumber, rowValue, currentRowIndexCounter - 1, diff);
+                    columnLetter, currentColumnIndex, colValue, currentRowIndex - 1, diff);
             tvStatus.setText(statusMsg);
 
             dataModel.setRecorded(true);
             appState.setDataRecordedForCycle(true);
 
             currentRowIndex++;
-            currentCsvRowNumber++;
 
             boolean exhausted = advanceToNextTableCell();
             if (exhausted) {
