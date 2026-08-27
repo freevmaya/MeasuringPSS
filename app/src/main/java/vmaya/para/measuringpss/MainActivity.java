@@ -70,7 +70,6 @@ public class MainActivity extends AppCompatActivity {
     private TableLayout tableLimitData;
     private ScrollView limitDataScrollView;
     private Button btnScan;
-    private Button btnConnect;
     private Button btnDisconnect;
     private Button btnSettings;
     private Button btnClear;
@@ -98,6 +97,11 @@ public class MainActivity extends AppCompatActivity {
 
     private PowerManager.WakeLock wakeLock;
 
+    private final List<Double> weightOverLimitBuffer = new ArrayList<>();
+    private final List<Integer> distanceBuffer = new ArrayList<>();
+    private double lastCsvValue = 0.0;
+    private SoundManager soundManager;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -122,7 +126,6 @@ public class MainActivity extends AppCompatActivity {
         tableLimitData = findViewById(R.id.tableLimitData);
         limitDataScrollView = findViewById(R.id.limitDataScrollView);
         btnScan = findViewById(R.id.btnScan);
-        btnConnect = findViewById(R.id.btnConnect);
         btnDisconnect = findViewById(R.id.btnDisconnect);
         btnSettings = findViewById(R.id.btnSettings);
         btnClear = findViewById(R.id.btnClear);
@@ -152,7 +155,6 @@ public class MainActivity extends AppCompatActivity {
 
         // Обработчики кнопок
         btnScan.setOnClickListener(v -> startScan());
-        btnConnect.setOnClickListener(v -> connectToDevice());
         btnDisconnect.setOnClickListener(v -> disconnectDevice());
         btnSettings.setOnClickListener(v -> openSettings());
         btnClear.setOnClickListener(v -> clearLimitData());
@@ -168,6 +170,10 @@ public class MainActivity extends AppCompatActivity {
 
         Button btnSaveDiff = findViewById(R.id.btnSaveDiff);
         btnSaveDiff.setOnClickListener(v -> saveDiffData());
+
+        soundManager = SoundManager.getInstance(this);
+
+        soundManager.testSound();
     }
 
     private void openDataTable() {
@@ -419,6 +425,8 @@ public class MainActivity extends AppCompatActivity {
         int weightOverLimit = (int) Math.round(correctedWeight - weightLimit);
         int targetWeightInt = (int) Math.round(targetWeight);
 
+        // Воспроизводим звук при добавлении записи
+        soundManager.playClickSound();
 
         // Создаем запись с номером стропы в пределах ряда
         DataSample sample = new DataSample(currentColumnIndex, currentRowIndex,
@@ -433,6 +441,9 @@ public class MainActivity extends AppCompatActivity {
      */
     private void clearLimitData() {
         if (limitDataList.isEmpty()) {
+            // Если список пуст, очищаем буферы
+            weightOverLimitBuffer.clear();
+            distanceBuffer.clear();
             return;
         }
 
@@ -447,6 +458,10 @@ public class MainActivity extends AppCompatActivity {
             currentRowIndex = last.getRowIndex();
             currentColumnIndex--;
         }
+
+        // Очищаем буферы при удалении
+        weightOverLimitBuffer.clear();
+        distanceBuffer.clear();
 
         updateLimitDataTable();
     }
@@ -719,6 +734,8 @@ public class MainActivity extends AppCompatActivity {
         currentRowIndex = 0;
         currentColumnIndex = 0;
         isTableDataExhausted = false;
+        weightOverLimitBuffer.clear();
+        distanceBuffer.clear();
     }
 
     private boolean advanceToNextTableCell() {
@@ -1018,30 +1035,77 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
 
+            // ВОСПРОИЗВЕДЕНИЕ ЗВУКА ПРИ КАЖДОМ ПРЕВЫШЕНИИ
+            soundManager.playClickSound();
+
             // Вычисляем разницу с таблицей CSV
             double diff = correctedDistance - csvValue;
+
+            // Сохраняем CSV значение для последующего использования
+            lastCsvValue = csvValue;
 
             // Определяем ряд: 0 = A, 1 = B, 2 = C, 3 = D, 4 = E
             int colValue = currentColumnIndex + 1;
 
-            // Добавляем запись
-            addLimitDataRecord(correctedWeight, csvValue, correctedDistance, diff, weightLimit);
+            // Сохраняем текущие значения превышения
+            double weightOverLimit = correctedWeight - weightLimit;
+            weightOverLimitBuffer.add(weightOverLimit);
+            distanceBuffer.add(correctedDistance);
 
-            String columnLetter = getColumnLetter(currentColumnIndex);
-            String statusMsg = String.format("✅ Записано: %s%d (Ряд %d, Стропа %d), Diff: %.2f",
-                    columnLetter, currentColumnIndex, colValue, currentRowIndex - 1, diff);
-            tvStatus.setText(statusMsg);
+            // Проверяем, достигнуто ли необходимое количество замеров
+            int measurementCount = appSettings.getMeasurementCount();
+
+            if (weightOverLimitBuffer.size() >= measurementCount) {
+                // Вычисляем средние значения
+                double avgWeightOverLimit = 0.0;
+                double avgDistance = 0.0;
+                for (Double w : weightOverLimitBuffer) {
+                    avgWeightOverLimit += w;
+                }
+                for (Integer d : distanceBuffer) {
+                    avgDistance += d;
+                }
+                avgWeightOverLimit /= weightOverLimitBuffer.size();
+                avgDistance /= distanceBuffer.size();
+
+                // Вычисляем среднюю разницу
+                double avgDiff = avgDistance - lastCsvValue;
+
+                // Добавляем усредненную запись
+                addLimitDataRecord(
+                        correctedWeight, // используем последний скорректированный вес
+                        lastCsvValue,
+                        (int) Math.round(avgDistance),
+                        avgDiff,
+                        weightLimit
+                );
+
+                String columnLetter = getColumnLetter(currentColumnIndex);
+                String statusMsg = String.format("✅ Записано (усреднено из %d замеров): %s%d (Ряд %d, Стропа %d), Diff: %.2f",
+                        measurementCount, columnLetter, currentColumnIndex, colValue, currentRowIndex - 1, avgDiff);
+                tvStatus.setText(statusMsg);
+
+                // Очищаем буферы
+                weightOverLimitBuffer.clear();
+                distanceBuffer.clear();
+
+                // Переходим к следующей ячейке
+                currentRowIndex++;
+                boolean exhausted = advanceToNextTableCell();
+                if (exhausted) {
+                    tvStatus.setText("✅ Все данные из таблицы обработаны!");
+                }
+            } else {
+                // Показываем прогресс накопления
+                String columnLetter = getColumnLetter(currentColumnIndex);
+                String statusMsg = String.format("⏳ Замер %d из %d для %s%d (Ряд %d, Стропа %d)",
+                        weightOverLimitBuffer.size(), measurementCount,
+                        columnLetter, currentColumnIndex, colValue, currentRowIndex - 1);
+                tvStatus.setText(statusMsg);
+            }
 
             dataModel.setRecorded(true);
             appState.setDataRecordedForCycle(true);
-
-            currentRowIndex++;
-
-            boolean exhausted = advanceToNextTableCell();
-            if (exhausted) {
-                tvStatus.setText("✅ Все данные из таблицы обработаны!");
-            }
-
             appState.setState(AppState.State.EXPECT_RETURN);
         }
     };
@@ -1062,7 +1126,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateUI(boolean connected) {
         btnScan.setEnabled(!connected);
-        btnConnect.setEnabled(!connected && currentDevice != null);
         btnDisconnect.setEnabled(connected);
 
         if (!connected && !isScanning) {
@@ -1081,6 +1144,10 @@ public class MainActivity extends AppCompatActivity {
         // Освобождаем блокировку, чтобы экран мог гаснуть
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release();
+        }
+        // Освобождаем SoundManager
+        if (soundManager != null) {
+            soundManager.release();
         }
         stopScan();
         disconnectDevice();

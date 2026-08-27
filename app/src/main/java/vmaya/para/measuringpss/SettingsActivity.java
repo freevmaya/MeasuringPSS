@@ -42,10 +42,9 @@ public class SettingsActivity extends AppCompatActivity {
                     text = String.valueOf(AppSettings.DEFAULT_WEIGHT_CF);
                 }
                 weightCfPref.setSummary("Текущее значение: " + text);
-                // Устанавливаем слушатель для обновления summary при изменении
                 weightCfPref.setOnPreferenceChangeListener((preference, newValue) -> {
                     weightCfPref.setSummary("Текущее значение: " + newValue.toString());
-                    return true; // Возвращаем true, чтобы сохранить новое значение
+                    return true;
                 });
             }
 
@@ -72,6 +71,29 @@ public class SettingsActivity extends AppCompatActivity {
                 weightLimitPref.setOnPreferenceChangeListener((preference, newValue) -> {
                     weightLimitPref.setSummary("Текущее значение: " + newValue.toString());
                     return true;
+                });
+            }
+
+            // Новый параметр - Количество замеров
+            EditTextPreference measurementCountPref = findPreference(AppSettings.KEY_MEASUREMENT_COUNT);
+            if (measurementCountPref != null) {
+                String text = measurementCountPref.getText();
+                if (text == null) {
+                    text = String.valueOf(AppSettings.DEFAULT_MEASUREMENT_COUNT);
+                }
+                measurementCountPref.setSummary("Текущее значение: " + text + " (от 1 до 10)");
+                measurementCountPref.setOnPreferenceChangeListener((preference, newValue) -> {
+                    try {
+                        int value = Integer.parseInt(newValue.toString());
+                        // Ограничиваем значение от 1 до 10
+                        if (value < 1 || value > 10) {
+                            return false; // Не сохранять невалидное значение
+                        }
+                        measurementCountPref.setSummary("Текущее значение: " + value + " (от 1 до 10)");
+                        return true;
+                    } catch (NumberFormatException e) {
+                        return false;
+                    }
                 });
             }
         }

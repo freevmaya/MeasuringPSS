@@ -18,4 +18,11 @@
         android:summary="Текущее значение: %s"
         android:defaultValue="100.0"
         android:inputType="numberDecimal" />
+    <EditTextPreference
+        android:key="measurement_count"
+        android:title="Количество замеров"
+        android:summary="Текущее значение: %s"
+        android:defaultValue="1"
+        android:inputType="number"
+        android:maxLength="2" />
 </PreferenceScreen>
