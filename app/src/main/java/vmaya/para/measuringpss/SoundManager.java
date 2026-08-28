@@ -179,6 +179,8 @@ public class SoundManager {
                 e.printStackTrace();
             }
         }
+
+        vibrate();
     }
 
     /**
@@ -195,6 +197,17 @@ public class SoundManager {
                 e.printStackTrace();
             }
             soundPool = null;
+        }
+    }
+
+    private void vibrate() {
+        try {
+            android.os.Vibrator vibrator = (android.os.Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+            if (vibrator != null && vibrator.hasVibrator()) {
+                vibrator.vibrate(100);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 

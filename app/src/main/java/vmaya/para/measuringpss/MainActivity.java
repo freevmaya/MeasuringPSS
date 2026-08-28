@@ -70,7 +70,6 @@ public class MainActivity extends AppCompatActivity {
     private TableLayout tableLimitData;
     private ScrollView limitDataScrollView;
     private Button btnScan;
-    private Button btnDisconnect;
     private Button btnSettings;
     private Button btnClear;
 
@@ -126,7 +125,6 @@ public class MainActivity extends AppCompatActivity {
         tableLimitData = findViewById(R.id.tableLimitData);
         limitDataScrollView = findViewById(R.id.limitDataScrollView);
         btnScan = findViewById(R.id.btnScan);
-        btnDisconnect = findViewById(R.id.btnDisconnect);
         btnSettings = findViewById(R.id.btnSettings);
         btnClear = findViewById(R.id.btnClear);
 
@@ -155,7 +153,6 @@ public class MainActivity extends AppCompatActivity {
 
         // Обработчики кнопок
         btnScan.setOnClickListener(v -> startScan());
-        btnDisconnect.setOnClickListener(v -> disconnectDevice());
         btnSettings.setOnClickListener(v -> openSettings());
         btnClear.setOnClickListener(v -> clearLimitData());
 
@@ -1126,7 +1123,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateUI(boolean connected) {
         btnScan.setEnabled(!connected);
-        btnDisconnect.setEnabled(connected);
 
         if (!connected && !isScanning) {
             btnScan.setText("🔍");
