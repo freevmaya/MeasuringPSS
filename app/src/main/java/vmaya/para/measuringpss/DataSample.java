@@ -6,7 +6,8 @@ public class DataSample {
     private int rowIndex;     // Ном. стропы (номер в пределах ряда, начинается с 1)
     private int weight;       // Превышение веса (correctedWeight - weightLimit)
     private int targetWeight; // Значение из CSV (потребная длина)
-    private int distance;     // Измеренная длина
+    private int rawDistance;  // Сырое расстояние БЕЗ коррекции (с датчика)
+    private int distance;     // Измеренная длина С коррекцией
     private double diff;      // Разница (correctedDistance - csvValue)
 
     public DataSample() {
@@ -14,24 +15,27 @@ public class DataSample {
         this.rowIndex = 0;
         this.weight = 0;
         this.targetWeight = 0;
+        this.rawDistance = 0;
         this.distance = 0;
         this.diff = 0.0;
     }
 
-    public DataSample(int col, int rowIndex, int weight, int targetWeight, int distance) {
+    public DataSample(int col, int rowIndex, int weight, int targetWeight, int rawDistance, int distance) {
         this.col = col;
         this.rowIndex = rowIndex;
         this.weight = weight;
         this.targetWeight = targetWeight;
+        this.rawDistance = rawDistance;
         this.distance = distance;
         this.diff = 0.0;
     }
 
-    public DataSample(int col, int rowIndex, int weight, int targetWeight, int distance, double diff) {
+    public DataSample(int col, int rowIndex, int weight, int targetWeight, int rawDistance, int distance, double diff) {
         this.col = col;
         this.rowIndex = rowIndex;
         this.weight = weight;
         this.targetWeight = targetWeight;
+        this.rawDistance = rawDistance;
         this.distance = distance;
         this.diff = diff;
     }
@@ -80,6 +84,14 @@ public class DataSample {
 
     public void setTargetWeight(int targetWeight) {
         this.targetWeight = targetWeight;
+    }
+
+    public int getRawDistance() {
+        return rawDistance;
+    }
+
+    public void setRawDistance(int rawDistance) {
+        this.rawDistance = rawDistance;
     }
 
     public int getDistance() {

@@ -9,7 +9,7 @@
     <EditTextPreference
         android:key="distance_add"
         android:title="Коррекция расстояния"
-        android:summary="Текущее значение: %s"
+        android:summary="Текущее значение: %s (0 - авто)"
         android:defaultValue="0"
         android:inputType="number" />
     <EditTextPreference
@@ -21,8 +21,22 @@
     <EditTextPreference
         android:key="measurement_count"
         android:title="Количество замеров"
-        android:summary="Текущее значение: %s"
+        android:summary="Текущее значение: %s (от 1 до 10)"
         android:defaultValue="1"
         android:inputType="number"
         android:maxLength="2" />
+    <!-- Новый параметр -->
+    <EditTextPreference
+        android:key="diff_threshold"
+        android:title="Порог разницы"
+        android:summary="Текущее значение: %s мм (от 10 до 200)"
+        android:defaultValue="20"
+        android:inputType="number"
+        android:maxLength="3" />
+    <!-- Новый переключатель для предотвращения гашения экрана -->
+    <SwitchPreferenceCompat
+        android:key="keep_screen_on"
+        android:title="Не гасить экран"
+        android:summary="Экран не будет гаснуть при работе приложения"
+        android:defaultValue="true" />
 </PreferenceScreen>

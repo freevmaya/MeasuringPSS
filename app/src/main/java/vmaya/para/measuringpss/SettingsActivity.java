@@ -7,6 +7,7 @@ import androidx.preference.EditTextPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
+import androidx.preference.SwitchPreferenceCompat;
 
 public class SettingsActivity extends AppCompatActivity {
 
@@ -54,9 +55,9 @@ public class SettingsActivity extends AppCompatActivity {
                 if (text == null) {
                     text = String.valueOf(AppSettings.DEFAULT_DISTANCE_ADD);
                 }
-                distanceAddPref.setSummary("Текущее значение: " + text);
+                distanceAddPref.setSummary("Текущее значение: " + text + " (0 - авто)");
                 distanceAddPref.setOnPreferenceChangeListener((preference, newValue) -> {
-                    distanceAddPref.setSummary("Текущее значение: " + newValue.toString());
+                    distanceAddPref.setSummary("Текущее значение: " + newValue.toString() + " (0 - авто)");
                     return true;
                 });
             }
@@ -74,7 +75,6 @@ public class SettingsActivity extends AppCompatActivity {
                 });
             }
 
-            // Новый параметр - Количество замеров
             EditTextPreference measurementCountPref = findPreference(AppSettings.KEY_MEASUREMENT_COUNT);
             if (measurementCountPref != null) {
                 String text = measurementCountPref.getText();
@@ -85,15 +85,46 @@ public class SettingsActivity extends AppCompatActivity {
                 measurementCountPref.setOnPreferenceChangeListener((preference, newValue) -> {
                     try {
                         int value = Integer.parseInt(newValue.toString());
-                        // Ограничиваем значение от 1 до 10
                         if (value < 1 || value > 10) {
-                            return false; // Не сохранять невалидное значение
+                            return false;
                         }
                         measurementCountPref.setSummary("Текущее значение: " + value + " (от 1 до 10)");
                         return true;
                     } catch (NumberFormatException e) {
                         return false;
                     }
+                });
+            }
+
+            EditTextPreference diffThresholdPref = findPreference(AppSettings.KEY_DIFF_THRESHOLD);
+            if (diffThresholdPref != null) {
+                String text = diffThresholdPref.getText();
+                if (text == null) {
+                    text = String.valueOf(AppSettings.DEFAULT_DIFF_THRESHOLD);
+                }
+                diffThresholdPref.setSummary("Текущее значение: " + text + " мм (от 10 до 200)");
+                diffThresholdPref.setOnPreferenceChangeListener((preference, newValue) -> {
+                    try {
+                        int value = Integer.parseInt(newValue.toString());
+                        if (value < 10 || value > 200) {
+                            return false;
+                        }
+                        diffThresholdPref.setSummary("Текущее значение: " + value + " мм (от 10 до 200)");
+                        return true;
+                    } catch (NumberFormatException e) {
+                        return false;
+                    }
+                });
+            }
+
+            // Обработка нового параметра Keep Screen On
+            SwitchPreferenceCompat keepScreenOnPref = findPreference(AppSettings.KEY_KEEP_SCREEN_ON);
+            if (keepScreenOnPref != null) {
+                keepScreenOnPref.setSummary(keepScreenOnPref.isChecked() ? "Экран не будет гаснуть" : "Экран может гаснуть");
+                keepScreenOnPref.setOnPreferenceChangeListener((preference, newValue) -> {
+                    boolean isChecked = (boolean) newValue;
+                    keepScreenOnPref.setSummary(isChecked ? "Экран не будет гаснуть" : "Экран может гаснуть");
+                    return true;
                 });
             }
         }
