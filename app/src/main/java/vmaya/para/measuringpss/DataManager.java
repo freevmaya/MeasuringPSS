@@ -124,4 +124,31 @@ public class DataManager {
         }
         return maxColumns;
     }
+
+    /**
+     * Парсит значение ячейки CSV, чтобы получить целевой вес (первое число).
+     * Поддерживает форматы:
+     * - "число" (например, "6340")
+     * - "число/номер" (например, "6340/1")
+     * @param cellValue сырое значение из ячейки
+     * @return первое число как Double, или null, если парсинг не удался
+     */
+    public Double parseTargetWeightFromCell(String cellValue) {
+        if (cellValue == null || cellValue.trim().isEmpty()) {
+            return null;
+        }
+
+        String trimmedValue = cellValue.trim();
+        // Разделяем по '/'
+        String[] parts = trimmedValue.split("/");
+        String numericPart = parts[0]; // Берем первую часть
+
+        try {
+            // Заменяем запятую на точку и парсим как Double
+            numericPart = numericPart.replace(',', '.');
+            return Double.parseDouble(numericPart);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
 }

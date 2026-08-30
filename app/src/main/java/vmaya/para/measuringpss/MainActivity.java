@@ -236,7 +236,7 @@ public class MainActivity extends AppCompatActivity {
 
     /**
      * Сохраняет diff значения из DataSample в CSV файл.
-     * Формат: Ряд, Ном. стропы, Превышение, Расчет, Разница
+     * Формат: Ряд, Ном. стропы, Ном. нижн., Превышение, Расчет, Разница
      */
     private void saveDiffData() {
         DataManager dataManager = DataManager.getInstance();
@@ -265,15 +265,17 @@ public class MainActivity extends AppCompatActivity {
 
         // Подготавливаем содержимое CSV
         StringBuilder csvContent = new StringBuilder();
-        csvContent.append("Ряд,Ном. стропы,Превышение,Расчет,Разница\n");
+        csvContent.append("Ряд,Ном. стропы,Ном. нижн.,Превышение,Расчет,Разница\n");
         for (DataSample sample : limitDataList) {
             String rowLetter = sample.getColString();
             String rowIndex = String.valueOf(sample.getRowIndex() + 1);
+            String lowerTierNumber = sample.getLowerTierNumber() != 0 ? String.valueOf(sample.getLowerTierNumber()) : "";
             String weightOverLimit = String.valueOf(sample.getWeight());
             String calculation = String.format("%d - %d", sample.getDistance(), sample.getTargetWeight());
             String diff = String.format("%.0f", sample.getDiff());
             csvContent.append(rowLetter).append(",")
                     .append(rowIndex).append(",")
+                    .append(lowerTierNumber).append(",")
                     .append(weightOverLimit).append(",")
                     .append(calculation).append(",")
                     .append(diff).append("\n");
@@ -475,23 +477,63 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
+     * Парсит значение ячейки CSV, чтобы получить номер стропы нижнего яруса.
+     * @param cellValue сырое значение из ячейки
+     * @return номер стропы нижнего яруса, или 0, если его нет
+     */
+    private int parseLowerTierNumber(String cellValue) {
+        if (cellValue == null || cellValue.trim().isEmpty()) {
+            return 0;
+        }
+
+        String trimmedValue = cellValue.trim();
+        // Разделяем по '/'
+        String[] parts = trimmedValue.split("/");
+        if (parts.length == 2) {
+            try {
+                return Integer.parseInt(parts[1].trim());
+            } catch (NumberFormatException e) {
+                return 0;
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * Получает целевое значение из текущей ячейки CSV.
+     */
+    private Double getCurrentCsvValue() {
+        DataManager dataManager = DataManager.getInstance();
+        if (!dataManager.isCsvLoaded() || isTableDataExhausted) {
+            return null;
+        }
+
+        String value = dataManager.getCellValue(currentRowIndex, currentColumnIndex);
+        if (value == null) {
+            return null;
+        }
+
+        // Используем новый метод для парсинга только числа
+        return dataManager.parseTargetWeightFromCell(value);
+    }
+
+    /**
      * Обновляет таблицу предельных данных
      * Колонки:
      * Ряд - буква колонки из CSV (A, B, C, D, E)
      * Ном. стропы - номер строки в пределах текущего ряда (1, 2, 3, ...)
-     * Превышение - разница между измеренным весом и предельным
      * Расчет - строка: "Измеренная длина - Требуемая длина"
      * Разница - числовое значение diff
      */
     private void updateLimitDataTable() {
         tableLimitData.removeAllViews();
 
-        // Всегда показываем 5 колонок
-        String[] headers = {"Ряд", "Ном", "Прев", "Расч", "Разн"};
+        // Показываем 4 колонки (убрали "Ном. нижн." и "Превышение")
+        String[] headers = {"Ряд", "Ном", "Расч", "Разн"};
         addTableRow(headers, true);
 
         if (limitDataList.isEmpty()) {
-            String[] emptyRow = {"", "", "", "", ""};
+            String[] emptyRow = {"", "", "", ""};
             addTableRow(emptyRow, false);
             return;
         }
@@ -505,9 +547,6 @@ public class MainActivity extends AppCompatActivity {
 
             // Ном. стропы - номер в пределах ряда
             String rowIndex = hasCsvData ? String.valueOf(sample.getRowIndex() + 1) : "";
-
-            // Превышение
-            String weightOverLimit = String.valueOf(sample.getWeight());
 
             // Расчет: "Измеренная длина - Требуемая длина"
             String calculation;
@@ -525,7 +564,6 @@ public class MainActivity extends AppCompatActivity {
             String[] rowData = new String[]{
                     rowLetter,       // Ряд
                     rowIndex,        // Ном. стропы
-                    weightOverLimit, // Превышение
                     calculation,     // Расчет
                     diffValue        // Разница
             };
@@ -553,9 +591,9 @@ public class MainActivity extends AppCompatActivity {
         // Проверяем, нужно ли красить ячейку с разницей
         boolean highlightDiff = false;
         double diffValue = 0.0;
-        if (!isHeader && columns.length == 5 && !columns[4].isEmpty()) {
+        if (!isHeader && columns.length == 4 && !columns[3].isEmpty()) {
             try {
-                diffValue = Double.parseDouble(columns[4]);
+                diffValue = Double.parseDouble(columns[3]);
                 if (Math.abs(diffValue) > diffThreshold) {
                     highlightDiff = true;
                 }
@@ -579,7 +617,7 @@ public class MainActivity extends AppCompatActivity {
                 textView.setTypeface(null, android.graphics.Typeface.BOLD);
             } else {
                 // Раскрашиваем ячейку с разницей, если она превышает порог
-                if (highlightDiff && i == 4) {
+                if (highlightDiff && i == 3) {
                     textView.setBackgroundColor(0xFFFFC0CB); // Светло-розовый
                 } else {
                     int position = tableLimitData.getChildCount();
@@ -607,15 +645,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Добавляет новую запись в список предельных данных
-     * @param correctedWeight скорректированный вес с датчика
-     * @param targetWeight значение из CSV таблицы (потребная длина)
-     * @param rawDistance сырое расстояние БЕЗ коррекции
-     * @param distance скорректированное расстояние
-     * @param diff разница с таблицей CSV
-     * @param weightLimit текущий предел веса
+     * Добавляет новую запись в список предельных данных (обновленная версия)
      */
-    private void addLimitDataRecord(double correctedWeight, double targetWeight, int rawDistance, int distance, double diff, double weightLimit) {
+    private void addLimitDataRecord(double correctedWeight, double targetWeight, int rawDistance, int distance, double diff, double weightLimit, int lowerTierNumber) {
 
         int weightOverLimit = (int) Math.round(correctedWeight - weightLimit);
         int targetWeightInt = (int) Math.round(targetWeight);
@@ -623,9 +655,9 @@ public class MainActivity extends AppCompatActivity {
         // Воспроизводим звук при добавлении записи
         soundManager.playClickSound();
 
-        // Создаем запись с номером стропы в пределах ряда
+        // Создаем запись с номером стропы в пределах ряда и номером нижнего яруса
         DataSample sample = new DataSample(currentColumnIndex, currentRowIndex,
-                weightOverLimit, targetWeightInt, rawDistance, distance, diff);
+                weightOverLimit, targetWeightInt, rawDistance, distance, diff, lowerTierNumber);
         limitDataList.add(sample);
 
         // Если в настройках distanceAdd == 0, вычисляем динамическую коррекцию и пересчитываем все записи
@@ -1051,25 +1083,6 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
-    private Double getCurrentCsvValue() {
-        DataManager dataManager = DataManager.getInstance();
-        if (!dataManager.isCsvLoaded() || isTableDataExhausted) {
-            return null;
-        }
-
-        String value = dataManager.getCellValue(currentRowIndex, currentColumnIndex);
-        if (value == null) {
-            return null;
-        }
-
-        try {
-            value = value.replace(',', '.');
-            return Double.parseDouble(value);
-        } catch (NumberFormatException e) {
-            return null;
-        }
-    }
-
     private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
         @SuppressLint("MissingPermission")
         @Override
@@ -1230,8 +1243,8 @@ public class MainActivity extends AppCompatActivity {
                                 processWithCsvData(correctedWeight, correctedDistance, rawDistance, dataModel, weightLimit);
                             } else {
                                 // Если CSV не загружен, добавляем запись без целевого значения
-                                // Используем 0 как targetWeight
-                                addLimitDataRecord(correctedWeight, 0.0, rawDistance, correctedDistance, 0.0, weightLimit);
+                                // Используем 0 как targetWeight и 0 как номер нижнего яруса
+                                addLimitDataRecord(correctedWeight, 0.0, rawDistance, correctedDistance, 0.0, weightLimit, 0);
                                 dataModel.setRecorded(true);
                                 appState.setDataRecordedForCycle(true);
                                 appState.setState(AppState.State.EXPECT_RETURN);
@@ -1291,12 +1304,14 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
 
-            Double csvValue = getCurrentCsvValue();
+            String rawCellValue = dataManager.getCellValue(currentRowIndex, currentColumnIndex);
+            Double csvValue = dataManager.parseTargetWeightFromCell(rawCellValue);
+            int lowerTierNumber = parseLowerTierNumber(rawCellValue);
 
             if (csvValue == null) {
                 String columnLetter = getColumnLetter(currentColumnIndex);
                 String message = String.format("⚠️ Ячейка %s%d не содержит число или пуста",
-                        columnLetter, currentRowIndex);
+                        columnLetter, currentRowIndex + 1);
                 tvStatus.setText(message);
                 Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
 
@@ -1330,12 +1345,10 @@ public class MainActivity extends AppCompatActivity {
             if (weightOverLimitBuffer.size() >= measurementCount) {
                 // Вычисляем средние значения
                 double avgWeightOverLimit = 0.0;
-                double avgRawDistance = 0.0; // Среднее сырое расстояние
                 double avgDistance = 0.0;
                 for (Double w : weightOverLimitBuffer) {
                     avgWeightOverLimit += w;
                 }
-                // Для сырого расстояния используем значения из distanceBuffer (это сырые расстояния)
                 for (Integer d : distanceBuffer) {
                     avgDistance += d;
                 }
@@ -1346,21 +1359,19 @@ public class MainActivity extends AppCompatActivity {
                 double avgDiff = avgDistance - lastCsvValue;
 
                 // Добавляем усредненную запись
-                // Передаем rawDistance как последнее сырое расстояние (для статистики)
-                int avgRawDistanceInt = (int) Math.round(avgDistance);
-                // Для сырого расстояния используем то же значение, так как distanceBuffer содержит сырые данные
                 addLimitDataRecord(
-                        correctedWeight, // используем последний скорректированный вес
+                        correctedWeight,
                         lastCsvValue,
-                        rawDistance, // сырое расстояние (без коррекции)
-                        avgRawDistanceInt, // расстояние с коррекцией (пока равно сырому, пересчитается в addLimitDataRecord)
+                        rawDistance,
+                        (int) Math.round(avgDistance),
                         avgDiff,
-                        weightLimit
+                        weightLimit,
+                        lowerTierNumber
                 );
 
                 String columnLetter = getColumnLetter(currentColumnIndex);
                 String statusMsg = String.format("✅ Записано (усреднено из %d замеров): %s%d (Ряд %d, Стропа %d), Diff: %.2f",
-                        measurementCount, columnLetter, currentColumnIndex, colValue, currentRowIndex - 1, avgDiff);
+                        measurementCount, columnLetter, currentColumnIndex + 1, colValue, currentRowIndex + 1, avgDiff);
                 tvStatus.setText(statusMsg);
 
                 // Очищаем буферы
@@ -1378,7 +1389,7 @@ public class MainActivity extends AppCompatActivity {
                 String columnLetter = getColumnLetter(currentColumnIndex);
                 String statusMsg = String.format("⏳ Замер %d из %d для %s%d (Ряд %d, Стропа %d)",
                         weightOverLimitBuffer.size(), measurementCount,
-                        columnLetter, currentColumnIndex, colValue, currentRowIndex - 1);
+                        columnLetter, currentColumnIndex + 1, colValue, currentRowIndex + 1);
                 tvStatus.setText(statusMsg);
             }
 

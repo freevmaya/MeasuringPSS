@@ -6,6 +6,7 @@ public class DataSample {
     private int rowIndex;     // Ном. стропы (номер в пределах ряда, начинается с 1)
     private int weight;       // Превышение веса (correctedWeight - weightLimit)
     private int targetWeight; // Значение из CSV (потребная длина)
+    private int lowerTierNumber; // Номер стропы нижнего яруса (из CSV)
     private int rawDistance;  // Сырое расстояние БЕЗ коррекции (с датчика)
     private int distance;     // Измеренная длина С коррекцией
     private double diff;      // Разница (correctedDistance - csvValue)
@@ -18,6 +19,7 @@ public class DataSample {
         this.rawDistance = 0;
         this.distance = 0;
         this.diff = 0.0;
+        this.lowerTierNumber = 0;
     }
 
     public DataSample(int col, int rowIndex, int weight, int targetWeight, int rawDistance, int distance) {
@@ -38,6 +40,17 @@ public class DataSample {
         this.rawDistance = rawDistance;
         this.distance = distance;
         this.diff = diff;
+    }
+
+    public DataSample(int col, int rowIndex, int weight, int targetWeight, int rawDistance, int distance, double diff, int lowerTierNumber) {
+        this.col = col;
+        this.rowIndex = rowIndex;
+        this.weight = weight;
+        this.targetWeight = targetWeight;
+        this.rawDistance = rawDistance;
+        this.distance = distance;
+        this.diff = diff;
+        this.lowerTierNumber = lowerTierNumber;
     }
 
     public int getCol() {
@@ -108,6 +121,14 @@ public class DataSample {
 
     public void setDiff(double diff) {
         this.diff = diff;
+    }
+
+    public int getLowerTierNumber() {
+        return lowerTierNumber;
+    }
+
+    public void setLowerTierNumber(int lowerTierNumber) {
+        this.lowerTierNumber = lowerTierNumber;
     }
 
     @Override
