@@ -52,7 +52,7 @@ public class StatisticsActivity extends AppCompatActivity {
         setSupportActionBar(toolbar);
         if (getSupportActionBar() != null) {
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-            getSupportActionBar().setTitle("Статистика по группам");
+            getSupportActionBar().setTitle("Отклонение в группах");
         }
 
         tableStatistics = findViewById(R.id.tableStatistics);
@@ -99,7 +99,7 @@ public class StatisticsActivity extends AppCompatActivity {
                 continue;
             }
 
-            String groupKey = sample.getColString() + "n" + sample.getLowerTierNumber();
+            String groupKey = sample.getColString() + sample.getLowerTierNumber();
             groups.computeIfAbsent(groupKey, k -> new ArrayList<>())
                     .add(sample.getDiff());
         }
@@ -207,7 +207,7 @@ public class StatisticsActivity extends AppCompatActivity {
         }
 
         // Заголовки
-        String[] headers = {"Группа", "Количество", "Средняя diff"};
+        String[] headers = {"Стропа", "Кол-во", "Среднее отклонение"};
         addTableRow(headers, true);
 
         // Получаем порог разницы из настроек

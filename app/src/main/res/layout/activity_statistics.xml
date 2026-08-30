@@ -22,25 +22,6 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <!-- Заголовок -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="📊 Статистика по группам строп"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:paddingBottom="8dp" />
-
-        <!-- Кнопка экспорта -->
-        <Button
-            android:id="@+id/btnExportCsv"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="end"
-            android:layout_marginBottom="12dp"
-            android:backgroundTint="#4CAF50"
-            android:text="💾 Экспортировать в CSV" />
-
         <!-- Таблица -->
         <ScrollView
             android:id="@+id/statisticsScrollView"
@@ -83,6 +64,16 @@
                 android:textSize="14sp"
                 android:gravity="end" />
         </LinearLayout>
+
+        <!-- Кнопка экспорта -->
+        <Button
+            android:id="@+id/btnExportCsv"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:layout_marginBottom="12dp"
+            android:backgroundTint="#4CAF50"
+            android:text="💾 Экспортировать в CSV" />
 
     </LinearLayout>
 
