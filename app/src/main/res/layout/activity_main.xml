@@ -44,6 +44,15 @@
         android:layout_marginTop="8dp">
 
         <Button
+            android:id="@+id/btnSettings"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="⚙️"
+            android:textSize="24sp"
+            android:layout_marginEnd="4dp" />
+
+        <Button
             android:id="@+id/btnScan"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -69,15 +78,6 @@
         android:layout_marginTop="4dp">
 
         <Button
-            android:id="@+id/btnSettings"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="⚙️"
-            android:textSize="24sp"
-            android:layout_marginEnd="4dp" />
-
-        <Button
             android:id="@+id/btnDataTable"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -94,6 +94,15 @@
             android:text="💾"
             android:textSize="24sp"
             android:layout_marginStart="4dp" />
+
+        <Button
+            android:id="@+id/btnStatistics"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="📈"
+            android:textSize="24sp"
+            android:layout_marginEnd="4dp" />
     </LinearLayout>
 
     <!-- Предельные данные -->

@@ -154,6 +154,10 @@ public class MainActivity extends AppCompatActivity {
         btnSettings.setOnClickListener(v -> openSettings());
         btnClear.setOnClickListener(v -> clearLimitData());
 
+        // Новая кнопка статистики
+        View btnStatistics = findViewById(R.id.btnStatistics);
+        btnStatistics.setOnClickListener(v -> openStatistics());
+
         // Обновляем состояние кнопок
         updateUI(false);
 
@@ -169,6 +173,16 @@ public class MainActivity extends AppCompatActivity {
         soundManager = SoundManager.getInstance(this);
 
         soundManager.testSound();
+    }
+
+    /**
+     * Открывает активность со статистикой по группам
+     */
+    private void openStatistics() {
+        // Сохраняем данные в DataHolder перед открытием статистики
+        StatisticsDataHolder.getInstance().setDataSamples(limitDataList);
+        Intent intent = new Intent(this, StatisticsActivity.class);
+        startActivity(intent);
     }
 
     @Override
