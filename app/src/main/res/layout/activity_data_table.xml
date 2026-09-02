@@ -22,6 +22,19 @@
         android:orientation="vertical"
         android:padding="16dp">
 
+        <!-- Имя файла -->
+        <TextView
+            android:id="@+id/tvFileName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📄 Данные не загружены"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:padding="8dp"
+            android:background="#E3F2FD"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone" />
+
         <Button
             android:id="@+id/btnLoadCsv"
             android:layout_width="wrap_content"
@@ -33,7 +46,8 @@
 
         <HorizontalScrollView
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
+            android:layout_height="0dp"
+            android:layout_weight="1">
 
             <ScrollView
                 android:layout_width="match_parent"
@@ -47,6 +61,19 @@
 
             </ScrollView>
         </HorizontalScrollView>
+
+        <!-- Разница между min и max -->
+        <TextView
+            android:id="@+id/tvMinMaxDifference"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:padding="12dp"
+            android:background="#FFF3E0"
+            android:layout_marginTop="8dp"
+            android:visibility="gone" />
 
     </LinearLayout>
 

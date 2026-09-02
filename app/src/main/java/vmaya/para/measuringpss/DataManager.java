@@ -102,10 +102,25 @@ public class DataManager {
     }
 
     /**
-     * Получить количество строк в CSV
+     * Получить количество строк (строп) в конкретной колонке (ряду)
+     * @param col индекс колонки (0 - колонка A, 1 - колонка B, и т.д.)
+     * @return количество непустых строк в указанной колонке
      */
-    public int getRowCount() {
-        return isCsvLoaded ? csvData.size() : 0;
+    public int getRowCount(int col) {
+        if (!isCsvLoaded || csvData.isEmpty()) {
+            return 0;
+        }
+
+        int count = 0;
+        for (String[] row : csvData) {
+            if (col < row.length) {
+                String value = row[col];
+                if (value != null && !value.trim().isEmpty()) {
+                    count++;
+                }
+            }
+        }
+        return count;
     }
 
     /**

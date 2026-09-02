@@ -12,6 +12,7 @@ import android.provider.OpenableColumns;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.TableLayout;
 import android.widget.TableRow;
 import android.widget.TextView;
@@ -36,6 +37,8 @@ public class DataTableActivity extends AppCompatActivity {
 
     private TableLayout tableData;
     private Button btnLoadCsv;
+    private TextView tvFileName;
+    private TextView tvMinMaxDifference;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,8 +55,13 @@ public class DataTableActivity extends AppCompatActivity {
 
         tableData = findViewById(R.id.tableData);
         btnLoadCsv = findViewById(R.id.btnLoadCsv);
+        tvFileName = findViewById(R.id.tvFileName);
+        tvMinMaxDifference = findViewById(R.id.tvMinMaxDifference);
 
         btnLoadCsv.setOnClickListener(v -> loadCsvFile());
+
+        // Проверяем, есть ли уже загруженные данные
+        displayExistingData();
     }
 
     @Override
@@ -63,6 +71,53 @@ public class DataTableActivity extends AppCompatActivity {
             return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    /**
+     * Отображает уже загруженные данные, если они есть
+     */
+    private void displayExistingData() {
+        DataManager dataManager = DataManager.getInstance();
+
+        if (dataManager.isCsvLoaded()) {
+            List<String[]> data = dataManager.getCsvData();
+            String fileName = dataManager.getCurrentFileName();
+
+            if (data != null && !data.isEmpty()) {
+                // Показываем имя файла
+                if (tvFileName != null) {
+                    tvFileName.setText("📄 " + fileName);
+                    tvFileName.setVisibility(View.VISIBLE);
+                }
+
+                // Отображаем таблицу
+                displayTable(data);
+
+                Toast.makeText(this,
+                        "Загружено " + data.size() + " записей из " + fileName,
+                        Toast.LENGTH_SHORT).show();
+                return;
+            }
+        }
+
+        // Если данных нет, показываем сообщение
+        if (tvFileName != null) {
+            tvFileName.setText("📄 Данные не загружены");
+            tvFileName.setVisibility(View.VISIBLE);
+        }
+
+        // Показываем пустую таблицу с сообщением
+        showEmptyTable();
+    }
+
+    /**
+     * Показывает пустую таблицу с сообщением
+     */
+    private void showEmptyTable() {
+        tableData.removeAllViews();
+        String[] emptyRow = {"Загрузите CSV файл для отображения данных"};
+        addTableRow(emptyRow, false, null, null);
+        updateMinMaxDifference(null, null);
     }
 
     private void loadCsvFile() {
@@ -189,11 +244,20 @@ public class DataTableActivity extends AppCompatActivity {
             if (rows.isEmpty()) {
                 Toast.makeText(this, "Файл пуст или не содержит данных", Toast.LENGTH_SHORT).show();
                 DataManager.getInstance().clearCsvData();
+                showEmptyTable();
                 return;
             }
 
-            // Исправлено: передаем uri в DataManager
-            DataManager.getInstance().setCsvData(rows, fileName, uri); // Изменено здесь
+            // Сохраняем данные в DataManager
+            DataManager.getInstance().setCsvData(rows, fileName, uri);
+
+            // Обновляем имя файла в UI
+            if (tvFileName != null) {
+                tvFileName.setText("📄 " + fileName);
+                tvFileName.setVisibility(View.VISIBLE);
+            }
+
+            // Отображаем таблицу
             displayTable(rows);
 
             Toast.makeText(this, "Загружено " + rows.size() + " записей из " + fileName, Toast.LENGTH_LONG).show();
@@ -202,6 +266,7 @@ public class DataTableActivity extends AppCompatActivity {
             e.printStackTrace();
             Toast.makeText(this, "Ошибка чтения файла: " + e.getMessage(), Toast.LENGTH_LONG).show();
             DataManager.getInstance().clearCsvData();
+            showEmptyTable();
         }
     }
 
@@ -262,11 +327,34 @@ public class DataTableActivity extends AppCompatActivity {
         return ',';
     }
 
+    /**
+     * Обновляет TextView с разницей между минимальным и максимальным значением
+     */
+    private void updateMinMaxDifference(Double minValue, Double maxValue) {
+        if (tvMinMaxDifference == null) {
+            return;
+        }
+
+        if (minValue == null || maxValue == null) {
+            tvMinMaxDifference.setText("");
+            tvMinMaxDifference.setVisibility(View.GONE);
+            return;
+        }
+
+        double difference = maxValue - minValue;
+        String diffText = String.format("Разница между min и max: %.2f", difference);
+        tvMinMaxDifference.setText(diffText);
+        tvMinMaxDifference.setVisibility(View.VISIBLE);
+    }
+
+    /**
+     * Отображает таблицу с данными, выделяя минимальное и максимальное значение по всем длинам строп
+     */
     private void displayTable(List<String[]> rows) {
         tableData.removeAllViews();
 
         if (rows.isEmpty()) {
-            Toast.makeText(this, "Нет данных для отображения", Toast.LENGTH_SHORT).show();
+            showEmptyTable();
             return;
         }
 
@@ -278,13 +366,47 @@ public class DataTableActivity extends AppCompatActivity {
         }
 
         if (maxColumns == 0) {
-            Toast.makeText(this, "Нет данных для отображения", Toast.LENGTH_SHORT).show();
+            showEmptyTable();
             return;
         }
 
-        String[] headers = generateColumnHeaders(maxColumns);
-        addTableRow(headers, true);
+        // Находим минимальное и максимальное числовое значение
+        Double minValue = null;
+        Double maxValue = null;
 
+        for (String[] row : rows) {
+            for (String cell : row) {
+                if (cell == null || cell.trim().isEmpty()) {
+                    continue;
+                }
+                try {
+                    // Пытаемся распарсить ячейку как число
+                    String numericPart = cell.trim().replace(',', '.');
+                    // Если в ячейке есть "/", берем только первую часть
+                    if (numericPart.contains("/")) {
+                        numericPart = numericPart.split("/")[0];
+                    }
+                    double value = Double.parseDouble(numericPart);
+                    if (minValue == null || value < minValue) {
+                        minValue = value;
+                    }
+                    if (maxValue == null || value > maxValue) {
+                        maxValue = value;
+                    }
+                } catch (NumberFormatException e) {
+                    // Игнорируем нечисловые значения
+                }
+            }
+        }
+
+        // Обновляем TextView с разницей
+        updateMinMaxDifference(minValue, maxValue);
+
+        // Добавляем заголовки (A, B, C, D, E, ...)
+        String[] headers = generateColumnHeaders(maxColumns);
+        addTableRow(headers, true, null, null);
+
+        // Добавляем строки данных
         for (String[] row : rows) {
             if (row.length < maxColumns) {
                 String[] newRow = new String[maxColumns];
@@ -294,10 +416,8 @@ public class DataTableActivity extends AppCompatActivity {
                 }
                 row = newRow;
             }
-            addTableRow(row, false);
+            addTableRow(row, false, minValue, maxValue);
         }
-
-        Toast.makeText(this, "Загружено " + rows.size() + " записей", Toast.LENGTH_SHORT).show();
     }
 
     private String[] generateColumnHeaders(int count) {
@@ -322,16 +442,20 @@ public class DataTableActivity extends AppCompatActivity {
         return sb.toString();
     }
 
-    private void addTableRow(String[] columns, boolean isHeader) {
+    /**
+     * Добавляет строку в таблицу с возможностью выделения минимального и максимального значения
+     */
+    private void addTableRow(String[] columns, boolean isHeader, Double minValue, Double maxValue) {
         TableRow tableRow = new TableRow(this);
         tableRow.setLayoutParams(new TableRow.LayoutParams(
                 TableRow.LayoutParams.MATCH_PARENT,
                 TableRow.LayoutParams.WRAP_CONTENT
         ));
 
-        for (String column : columns) {
+        for (int i = 0; i < columns.length; i++) {
             TextView textView = new TextView(this);
-            textView.setText(column != null ? column : "");
+            String column = columns[i] != null ? columns[i] : "";
+            textView.setText(column);
             textView.setPadding(12, 8, 12, 8);
 
             textView.setMaxLines(1);
@@ -343,11 +467,43 @@ public class DataTableActivity extends AppCompatActivity {
                 textView.setTextSize(16);
                 textView.setTypeface(null, android.graphics.Typeface.BOLD);
             } else {
-                int position = tableData.getChildCount();
-                if (position % 2 == 1) {
-                    textView.setBackgroundColor(0xFFF5F5F5);
+                // Проверяем, является ли ячейка числом, и выделяем её, если она равна min или max
+                boolean isMin = false;
+                boolean isMax = false;
+                if (minValue != null && maxValue != null && column != null && !column.isEmpty()) {
+                    try {
+                        String numericPart = column.trim().replace(',', '.');
+                        if (numericPart.contains("/")) {
+                            numericPart = numericPart.split("/")[0];
+                        }
+                        double value = Double.parseDouble(numericPart);
+                        // Сравниваем с погрешностью для double
+                        if (Math.abs(value - minValue) < 0.0001) {
+                            isMin = true;
+                        }
+                        if (Math.abs(value - maxValue) < 0.0001) {
+                            isMax = true;
+                        }
+                    } catch (NumberFormatException e) {
+                        // Игнорируем нечисловые значения
+                    }
+                }
+
+                // Устанавливаем цвет фона
+                if (isMin && isMax) {
+                    // Если значение одновременно и минимальное, и максимальное (все значения одинаковы)
+                    textView.setBackgroundColor(0xFF9C27B0); // Фиолетовый
+                } else if (isMin) {
+                    textView.setBackgroundColor(0xFFCCCCFF); // Синий
+                } else if (isMax) {
+                    textView.setBackgroundColor(0xFFFFCCCC); // Розовый
                 } else {
-                    textView.setBackgroundColor(0xFFFFFFFF);
+                    int position = tableData.getChildCount();
+                    if (position % 2 == 1) {
+                        textView.setBackgroundColor(0xFFF5F5F5);
+                    } else {
+                        textView.setBackgroundColor(0xFFFFFFFF);
+                    }
                 }
             }
 

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Таблица -->
+    <ScrollView
+        android:id="@+id/statisticsScrollView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <TableLayout
+            android:id="@+id/tableStatistics"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:stretchColumns="*" />
+
+    </ScrollView>
+
+    <!-- Итоговая информация -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="12dp"
+        android:padding="12dp"
+        android:background="#E3F2FD">
+
+        <TextView
+            android:id="@+id/tvTotalGroups"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Всего групп: 0"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvTotalRecords"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Всего записей: 0"
+            android:textSize="14sp"
+            android:gravity="end" />
+    </LinearLayout>
+
+    <!-- Кнопка экспорта -->
+    <Button
+        android:id="@+id/btnExportCsv"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end"
+        android:layout_marginBottom="12dp"
+        android:backgroundTint="#4CAF50"
+        android:text="💾 Экспортировать в CSV" />
+
+</LinearLayout>

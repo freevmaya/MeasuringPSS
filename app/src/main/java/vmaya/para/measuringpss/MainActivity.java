@@ -726,7 +726,7 @@ public class MainActivity extends AppCompatActivity {
             if (dataManager.isCsvLoaded()) {
                 int maxRowIndex = 0;
                 // Ищем последнюю непустую ячейку в текущем столбце
-                for (int i = 0; i < dataManager.getRowCount(); i++) {
+                for (int i = 0; i < dataManager.getRowCount(currentColumnIndex); i++) {
                     String value = dataManager.getCellValue(i, currentColumnIndex);
                     if (value != null && !value.trim().isEmpty()) {
                         maxRowIndex = i;
@@ -740,7 +740,6 @@ public class MainActivity extends AppCompatActivity {
             // Если мы в самом начале (0,0), сбрасываем индексы
             currentRowIndex = 0;
             currentColumnIndex = 0;
-            isTableDataExhausted = false;
         }
 
         // Очищаем буферы при удалении
@@ -759,6 +758,7 @@ public class MainActivity extends AppCompatActivity {
         } else {
             updateLimitDataTable();
         }
+        isTableDataExhausted = false;
     }
 
     private void checkPermissions() {
@@ -1045,7 +1045,7 @@ public class MainActivity extends AppCompatActivity {
             return false;
         }
 
-        int rowCount = dataManager.getRowCount();
+        int rowCount = dataManager.getRowCount(currentColumnIndex);
         int columnCount = dataManager.getColumnCount();
 
         if (rowCount == 0 || columnCount == 0) {
@@ -1079,7 +1079,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean advanceToNextNonEmptyCell(DataManager dataManager) {
-        int rowCount = dataManager.getRowCount();
+        int rowCount = dataManager.getRowCount(currentColumnIndex);
         int columnCount = dataManager.getColumnCount();
 
         for (int row = currentRowIndex; row < rowCount; row++) {
