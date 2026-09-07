@@ -1,10 +1,22 @@
 <resources>
     <string name="app_name">Measuring PSS</string>
+
     <string-array name="row_array">
         <item>A</item>
         <item>B</item>
         <item>C</item>
         <item>D</item>
         <item>E</item>
+    </string-array>
+
+    <!-- НОВЫЕ МАССИВЫ ДЛЯ НАСТРОЙКИ РЕЖИМА -->
+    <string-array name="measurement_mode_entries">
+        <item>Одна консоль</item>
+        <item>Две консоли (левая и правая)</item>
+    </string-array>
+
+    <string-array name="measurement_mode_values">
+        <item>single</item>
+        <item>dual</item>
     </string-array>
 </resources>

@@ -6,18 +6,21 @@
         android:summary="Текущее значение: %s"
         android:defaultValue="1.0"
         android:inputType="numberDecimal" />
+
     <EditTextPreference
         android:key="distance_add"
         android:title="Коррекция расстояния"
         android:summary="Текущее значение: %s (0 - авто)"
         android:defaultValue="0"
         android:inputType="number" />
+
     <EditTextPreference
         android:key="weight_limit"
         android:title="Предел веса"
         android:summary="Текущее значение: %s"
         android:defaultValue="100.0"
         android:inputType="numberDecimal" />
+
     <EditTextPreference
         android:key="measurement_count"
         android:title="Количество замеров"
@@ -25,7 +28,7 @@
         android:defaultValue="1"
         android:inputType="number"
         android:maxLength="2" />
-    <!-- Новый параметр -->
+
     <EditTextPreference
         android:key="diff_threshold"
         android:title="Порог разницы"
@@ -33,7 +36,16 @@
         android:defaultValue="20"
         android:inputType="number"
         android:maxLength="3" />
-    <!-- Новый переключатель для предотвращения гашения экрана -->
+
+    <!-- НОВЫЙ ПАРАМЕТР: Режим измерения -->
+    <ListPreference
+        android:key="measurement_mode"
+        android:title="Режим измерения"
+        android:summary="Текущий режим: %s"
+        android:defaultValue="single"
+        android:entries="@array/measurement_mode_entries"
+        android:entryValues="@array/measurement_mode_values" />
+
     <SwitchPreferenceCompat
         android:key="keep_screen_on"
         android:title="Не гасить экран"

@@ -1,7 +1,13 @@
 // app/src/main/java/vmaya/para/measuringpss/StatisticsFragment.java
 package vmaya.para.measuringpss;
 
+import android.content.ContentResolver;
+import android.content.ContentValues;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -16,6 +22,11 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -61,7 +72,8 @@ public class StatisticsFragment extends Fragment {
             return;
         }
 
-        // Группировка по Col + "n" + LowerTierNumber
+        // Группировка по нижней стропе + сторона
+        // Ключ: "AL1", "AR2", "BL3" и т.д.
         Map<String, List<Double>> groups = new HashMap<>();
 
         int skippedRecords = 0;
@@ -71,7 +83,8 @@ public class StatisticsFragment extends Fragment {
                 continue;
             }
 
-            String groupKey = sample.getColString() + sample.getLowerTierNumber();
+            // Используем новый метод getLowerIndex()
+            String groupKey = sample.getLowerIndex();
             groups.computeIfAbsent(groupKey, k -> new ArrayList<>())
                     .add(sample.getDiff());
         }
@@ -85,16 +98,24 @@ public class StatisticsFragment extends Fragment {
             return;
         }
 
+        // Сортировка ключей
         List<String> sortedKeys = new ArrayList<>(groups.keySet());
         Collections.sort(sortedKeys, (a, b) -> {
             try {
+                // Сортировка: AL1, AL2, AL3, AR1, AR2, BL1, BL2, ...
                 char charA = a.charAt(0);
                 char charB = b.charAt(0);
                 if (charA != charB) {
                     return Character.compare(charA, charB);
                 }
-                int numA = Integer.parseInt(a.substring(1));
-                int numB = Integer.parseInt(b.substring(1));
+                // Сравниваем сторону (L < R)
+                char sideA = a.charAt(1);
+                char sideB = b.charAt(1);
+                if (sideA != sideB) {
+                    return Character.compare(sideA, sideB);
+                }
+                int numA = Integer.parseInt(a.substring(2));
+                int numB = Integer.parseInt(b.substring(2));
                 return Integer.compare(numA, numB);
             } catch (NumberFormatException | StringIndexOutOfBoundsException e) {
                 return a.compareTo(b);
@@ -271,10 +292,50 @@ public class StatisticsFragment extends Fragment {
         }
     }
 
+    /**
+     * Сохраняет файл в папку Downloads
+     */
     private boolean saveFile(String fileName, String content) {
-        // Код сохранения файла (аналогичный предыдущему)
-        // ... (код из MainActivity.saveFile)
-        return true; // Упрощенно
+        ContentResolver resolver = requireContext().getContentResolver();
+        ContentValues contentValues = new ContentValues();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+            contentValues.put(MediaStore.MediaColumns.MIME_TYPE, "text/csv");
+            contentValues.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+        } else {
+            try {
+                File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                File file = new File(downloadsDir, fileName);
+                if (!downloadsDir.exists() && !downloadsDir.mkdirs()) {
+                    return false;
+                }
+                try (FileOutputStream fos = new FileOutputStream(file)) {
+                    fos.write(content.getBytes(StandardCharsets.UTF_8));
+                    return true;
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+                return false;
+            }
+        }
+
+        Uri uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues);
+        if (uri == null) {
+            return false;
+        }
+
+        try (OutputStream os = resolver.openOutputStream(uri)) {
+            if (os == null) {
+                return false;
+            }
+            os.write(content.getBytes(StandardCharsets.UTF_8));
+            return true;
+        } catch (Exception e) {
+            resolver.delete(uri, null, null);
+            e.printStackTrace();
+            return false;
+        }
     }
 
     private static class GroupStat {

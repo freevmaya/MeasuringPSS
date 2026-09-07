@@ -10,6 +10,7 @@ public class DataSample {
     private int rawDistance;  // Сырое расстояние БЕЗ коррекции (с датчика)
     private int distance;     // Измеренная длина С коррекцией
     private double diff;      // Разница (correctedDistance - csvValue)
+    private String side;      // НОВОЕ ПОЛЕ: "l" - левая, "r" - правая
 
     public DataSample() {
         this.col = 0;
@@ -20,6 +21,7 @@ public class DataSample {
         this.distance = 0;
         this.diff = 0.0;
         this.lowerTierNumber = 0;
+        this.side = "";
     }
 
     public DataSample(int col, int rowIndex, int weight, int targetWeight, int rawDistance, int distance) {
@@ -30,6 +32,7 @@ public class DataSample {
         this.rawDistance = rawDistance;
         this.distance = distance;
         this.diff = 0.0;
+        this.side = "";
     }
 
     public DataSample(int col, int rowIndex, int weight, int targetWeight, int rawDistance, int distance, double diff) {
@@ -40,6 +43,7 @@ public class DataSample {
         this.rawDistance = rawDistance;
         this.distance = distance;
         this.diff = diff;
+        this.side = "";
     }
 
     public DataSample(int col, int rowIndex, int weight, int targetWeight, int rawDistance, int distance, double diff, int lowerTierNumber) {
@@ -51,8 +55,23 @@ public class DataSample {
         this.distance = distance;
         this.diff = diff;
         this.lowerTierNumber = lowerTierNumber;
+        this.side = "";
     }
 
+    // НОВЫЙ КОНСТРУКТОР с параметром side
+    public DataSample(int col, int rowIndex, int weight, int targetWeight, int rawDistance, int distance, double diff, int lowerTierNumber, String side) {
+        this.col = col;
+        this.rowIndex = rowIndex;
+        this.weight = weight;
+        this.targetWeight = targetWeight;
+        this.rawDistance = rawDistance;
+        this.distance = distance;
+        this.diff = diff;
+        this.lowerTierNumber = lowerTierNumber;
+        this.side = (side != null && !side.isEmpty()) ? side : "";
+    }
+
+    // Геттеры и сеттеры
     public int getCol() {
         return col;
     }
@@ -71,7 +90,6 @@ public class DataSample {
             case 4: rowLetter = "E"; break;
             default: rowLetter = "?";
         }
-
         return rowLetter;
     }
 
@@ -131,13 +149,43 @@ public class DataSample {
         this.lowerTierNumber = lowerTierNumber;
     }
 
+    // НОВЫЙ ГЕТТЕР
+    public String getSide() {
+        return side;
+    }
+
+    // НОВЫЙ СЕТТЕР
+    public void setSide(String side) {
+        this.side = (side != null && !side.isEmpty()) ? side : "";
+    }
+
+    /**
+     * Получить полный индекс стропы верхнего яруса (например: "a4l", "b2r")
+     */
+    public String getFullIndex() {
+        String rowLetter = getColString().toLowerCase(); // "a", "b", "c"
+        int number = rowIndex + 1;
+        String sideStr = side.isEmpty() ? "" : side;
+        return rowLetter + number + sideStr;
+    }
+
+    /**
+     * Получить индекс стропы нижнего яруса (например: "AL2", "BR1")
+     */
+    public String getLowerIndex() {
+        String rowLetter = getColString(); // "A", "B", "C"
+        String sideStr = side.isEmpty() ? "" : side.toUpperCase();
+        return rowLetter + sideStr + lowerTierNumber;
+    }
+
     @Override
     public String toString() {
-        String rowLetter = getColString();
+        String fullIndex = getFullIndex();
         if (diff != 0)
-            return String.format("%s, %d, %d г, %d -%d, разница: %.0f мм",
-                    rowLetter, rowIndex, weight, targetWeight, distance, diff);
-        else return String.format("%s, %d, %d г, %d мм",
-                rowLetter, rowIndex, weight, distance);
+            return String.format("%s, %d г, %d -%d, разница: %.0f мм",
+                    fullIndex, weight, targetWeight, distance, diff);
+        else
+            return String.format("%s, %d г, %d мм",
+                    fullIndex, weight, distance);
     }
 }

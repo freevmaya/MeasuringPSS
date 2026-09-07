@@ -4,9 +4,9 @@ package vmaya.para.measuringpss;
 import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.preference.EditTextPreference;
+import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
-import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
 
 public class SettingsActivity extends AppCompatActivity {
@@ -35,7 +35,7 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         private void updateSummaries() {
-            // Находим Preference по ключу и обновляем его summary
+            // Вес
             EditTextPreference weightCfPref = findPreference(AppSettings.KEY_WEIGHT_CF);
             if (weightCfPref != null) {
                 String text = weightCfPref.getText();
@@ -49,6 +49,7 @@ public class SettingsActivity extends AppCompatActivity {
                 });
             }
 
+            // Коррекция
             EditTextPreference distanceAddPref = findPreference(AppSettings.KEY_DISTANCE_ADD);
             if (distanceAddPref != null) {
                 String text = distanceAddPref.getText();
@@ -62,6 +63,7 @@ public class SettingsActivity extends AppCompatActivity {
                 });
             }
 
+            // Предел
             EditTextPreference weightLimitPref = findPreference(AppSettings.KEY_WEIGHT_LIMIT);
             if (weightLimitPref != null) {
                 String text = weightLimitPref.getText();
@@ -75,6 +77,7 @@ public class SettingsActivity extends AppCompatActivity {
                 });
             }
 
+            // Количество замеров
             EditTextPreference measurementCountPref = findPreference(AppSettings.KEY_MEASUREMENT_COUNT);
             if (measurementCountPref != null) {
                 String text = measurementCountPref.getText();
@@ -96,6 +99,7 @@ public class SettingsActivity extends AppCompatActivity {
                 });
             }
 
+            // Порог разницы
             EditTextPreference diffThresholdPref = findPreference(AppSettings.KEY_DIFF_THRESHOLD);
             if (diffThresholdPref != null) {
                 String text = diffThresholdPref.getText();
@@ -117,7 +121,32 @@ public class SettingsActivity extends AppCompatActivity {
                 });
             }
 
-            // Обработка нового параметра Keep Screen On
+            // НОВЫЙ ПАРАМЕТР: Режим измерения
+            ListPreference measurementModePref = findPreference(AppSettings.KEY_MEASUREMENT_MODE);
+            if (measurementModePref != null) {
+                String value = measurementModePref.getValue();
+                if (value == null) {
+                    value = AppSettings.DEFAULT_MEASUREMENT_MODE;
+                }
+                String entry = measurementModePref.getEntry() != null
+                        ? measurementModePref.getEntry().toString()
+                        : "Одна консоль";
+                measurementModePref.setSummary("Текущий режим: " + entry);
+                measurementModePref.setOnPreferenceChangeListener((preference, newValue) -> {
+                    String newValueStr = newValue.toString();
+                    CharSequence[] entries = measurementModePref.getEntries();
+                    CharSequence[] entryValues = measurementModePref.getEntryValues();
+                    for (int i = 0; i < entryValues.length; i++) {
+                        if (entryValues[i].equals(newValueStr)) {
+                            measurementModePref.setSummary("Текущий режим: " + entries[i]);
+                            break;
+                        }
+                    }
+                    return true;
+                });
+            }
+
+            // Экран
             SwitchPreferenceCompat keepScreenOnPref = findPreference(AppSettings.KEY_KEEP_SCREEN_ON);
             if (keepScreenOnPref != null) {
                 keepScreenOnPref.setSummary(keepScreenOnPref.isChecked() ? "Экран не будет гаснуть" : "Экран может гаснуть");

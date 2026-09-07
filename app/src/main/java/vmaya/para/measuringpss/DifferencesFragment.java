@@ -3,7 +3,6 @@ package vmaya.para.measuringpss;
 
 import android.content.ContentResolver;
 import android.content.ContentValues;
-import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -75,27 +74,25 @@ public class DifferencesFragment extends Fragment {
             return;
         }
 
-        // Группируем данные по rowIndex (номеру стропы)
+        // Группируем данные по rowIndex + side (номер стропы + сторона)
         // Для каждой стропы храним: colIndex -> список значений
-        Map<Integer, Map<Integer, List<Double>>> measuredData = new HashMap<>();
-        Map<Integer, Map<Integer, List<Double>>> targetData = new HashMap<>();
+        Map<String, Map<Integer, List<Double>>> measuredData = new HashMap<>();
+        Map<String, Map<Integer, List<Double>>> targetData = new HashMap<>();
 
         for (DataSample sample : samples) {
-            // Пропускаем записи без целевого значения или измерения
             if (sample.getTargetWeight() == 0 || sample.getDistance() == 0) {
                 continue;
             }
 
-            int rowIndex = sample.getRowIndex();
+            // Ключ: rowIndex + side (например: "3l", "4r")
+            String key = sample.getRowIndex() + sample.getSide();
             int colIndex = sample.getCol();
 
-            // Измеренные длины
-            measuredData.computeIfAbsent(rowIndex, k -> new HashMap<>())
+            measuredData.computeIfAbsent(key, k -> new HashMap<>())
                     .computeIfAbsent(colIndex, k -> new ArrayList<>())
                     .add((double) sample.getDistance());
 
-            // Табличные длины (targetWeight)
-            targetData.computeIfAbsent(rowIndex, k -> new HashMap<>())
+            targetData.computeIfAbsent(key, k -> new HashMap<>())
                     .computeIfAbsent(colIndex, k -> new ArrayList<>())
                     .add((double) sample.getTargetWeight());
         }
@@ -106,20 +103,33 @@ public class DifferencesFragment extends Fragment {
             return;
         }
 
-        // Сортируем номера строп
-        List<Integer> sortedRowIndices = new ArrayList<>(measuredData.keySet());
-        Collections.sort(sortedRowIndices);
+        // Сортируем ключи (номера строп + стороны)
+        List<String> sortedKeys = new ArrayList<>(measuredData.keySet());
+        Collections.sort(sortedKeys, (a, b) -> {
+            try {
+                int numA = Integer.parseInt(a.replaceAll("[^0-9]", ""));
+                int numB = Integer.parseInt(b.replaceAll("[^0-9]", ""));
+                if (numA != numB) {
+                    return Integer.compare(numA, numB);
+                }
+                String sideA = a.replaceAll("[0-9]", "");
+                String sideB = b.replaceAll("[0-9]", "");
+                return sideA.compareTo(sideB);
+            } catch (NumberFormatException e) {
+                return a.compareTo(b);
+            }
+        });
 
         // Определяем пары колонок для перепадов: (0,1)=AB, (1,2)=BC, (2,3)=CD, (3,4)=DE
         int[][] colPairs = {{0, 1}, {1, 2}, {2, 3}, {3, 4}};
-        String[] pairNames = {"AB", "BC", "CD", "DE"};
+        String[] pairNames = {"ab", "bc", "cd", "de"};
 
         differenceStats.clear();
         int totalRecords = 0;
 
-        for (int rowIndex : sortedRowIndices) {
-            Map<Integer, List<Double>> measuredCols = measuredData.get(rowIndex);
-            Map<Integer, List<Double>> targetCols = targetData.get(rowIndex);
+        for (String key : sortedKeys) {
+            Map<Integer, List<Double>> measuredCols = measuredData.get(key);
+            Map<Integer, List<Double>> targetCols = targetData.get(key);
 
             // Вычисляем средние значения для каждой колонки
             Map<Integer, Double> measuredAvg = new HashMap<>();
@@ -132,8 +142,18 @@ public class DifferencesFragment extends Fragment {
                 targetAvg.put(col, calculateAverage(targetCols.get(col)));
             }
 
-            // Создаем статистику для этой стропы
+            // Парсим номер стропы и сторону из ключа
+            int rowIndex;
+            String side;
+            try {
+                rowIndex = Integer.parseInt(key.replaceAll("[^0-9]", ""));
+                side = key.replaceAll("[0-9]", "");
+            } catch (NumberFormatException e) {
+                continue;
+            }
+
             DifferenceStat diffStat = new DifferenceStat(rowIndex);
+            diffStat.setSide(side);
 
             // Рассчитываем перепады для каждой пары колонок
             for (int i = 0; i < colPairs.length; i++) {
@@ -197,14 +217,9 @@ public class DifferencesFragment extends Fragment {
             availablePairs.addAll(stat.pairDataMap.keySet());
         }
 
-        // Сортируем перепады: AB, BC, CD, DE
+        // Сортируем перепады: ab, bc, cd, de
         List<String> sortedPairs = new ArrayList<>(availablePairs);
-        Collections.sort(sortedPairs, (a, b) -> {
-            String order = "ABCDE";
-            int indexA = order.indexOf(a.charAt(0));
-            int indexB = order.indexOf(b.charAt(0));
-            return Integer.compare(indexA, indexB);
-        });
+        Collections.sort(sortedPairs);
 
         // Формируем заголовки
         List<String> headers = new ArrayList<>();
@@ -220,8 +235,10 @@ public class DifferencesFragment extends Fragment {
 
         // Отображаем данные для каждой стропы
         for (DifferenceStat stat : differenceStats) {
+            // Формируем индекс стропы: номер + сторона (например, "3l", "4r")
+            String index = (stat.rowIndex + 1) + stat.getSide();
             List<String> rowData = new ArrayList<>();
-            rowData.add(String.valueOf(stat.rowIndex + 1)); // Номер стропы
+            rowData.add(index);
 
             // Добавляем значения расхождений для каждого перепада
             for (String pair : sortedPairs) {
@@ -357,12 +374,7 @@ public class DifferencesFragment extends Fragment {
         }
 
         List<String> sortedPairs = new ArrayList<>(availablePairs);
-        Collections.sort(sortedPairs, (a, b) -> {
-            String order = "ABCDE";
-            int indexA = order.indexOf(a.charAt(0));
-            int indexB = order.indexOf(b.charAt(0));
-            return Integer.compare(indexA, indexB);
-        });
+        Collections.sort(sortedPairs);
 
         // Заголовки
         csvContent.append("Стропа");
@@ -373,7 +385,8 @@ public class DifferencesFragment extends Fragment {
 
         // Данные
         for (DifferenceStat stat : differenceStats) {
-            csvContent.append(stat.rowIndex + 1);
+            String index = (stat.rowIndex + 1) + stat.getSide();
+            csvContent.append(index);
             for (String pair : sortedPairs) {
                 DifferenceStat.PairData pairData = stat.getPairData(pair);
                 if (pairData != null) {
@@ -394,81 +407,10 @@ public class DifferencesFragment extends Fragment {
         }
     }
 
-    // app/src/main/java/vmaya/para/measuringpss/DifferencesFragment.java
-// Обновленный метод saveFile
-
+    /**
+     * Сохраняет файл в папку Downloads
+     */
     private boolean saveFile(String fileName, String content) {
-        DataManager dataManager = DataManager.getInstance();
-        Uri originalUri = dataManager.getCurrentFileUri();
-
-        if (originalUri == null) {
-            // Если URI исходного файла не известен, сохраняем в Downloads
-            return saveFileToDownloads(fileName, content);
-        }
-
-        try {
-            // Получаем путь к папке исходного файла
-            String originalPath = getFilePathFromUri(originalUri);
-            if (originalPath == null) {
-                return saveFileToDownloads(fileName, content);
-            }
-
-            // Формируем путь к новому файлу в той же папке
-            File parentDir = new File(originalPath).getParentFile();
-            if (parentDir == null || !parentDir.exists()) {
-                return saveFileToDownloads(fileName, content);
-            }
-
-            File newFile = new File(parentDir, fileName);
-
-            // Записываем файл
-            try (FileOutputStream fos = new FileOutputStream(newFile)) {
-                fos.write(content.getBytes(StandardCharsets.UTF_8));
-                return true;
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            // Если не удалось сохранить в исходную папку, пробуем в Downloads
-            return saveFileToDownloads(fileName, content);
-        }
-    }
-
-    /**
-     * Получает путь к файлу из Uri
-     */
-    private String getFilePathFromUri(Uri uri) {
-        if (uri == null) {
-            return null;
-        }
-
-        // Пробуем получить путь через MediaStore
-        if (uri.getScheme().equals("content")) {
-            try {
-                String[] projection = {MediaStore.MediaColumns.DATA};
-                Cursor cursor = requireContext().getContentResolver().query(uri, projection, null, null, null);
-                if (cursor != null && cursor.moveToFirst()) {
-                    int columnIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA);
-                    String path = cursor.getString(columnIndex);
-                    cursor.close();
-                    return path;
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-
-        // Если путь не получен через MediaStore, пробуем через файловую систему
-        if (uri.getScheme().equals("file")) {
-            return uri.getPath();
-        }
-
-        return null;
-    }
-
-    /**
-     * Сохраняет файл в папку Downloads (резервный вариант)
-     */
-    private boolean saveFileToDownloads(String fileName, String content) {
         ContentResolver resolver = requireContext().getContentResolver();
         ContentValues contentValues = new ContentValues();
 
@@ -513,10 +455,19 @@ public class DifferencesFragment extends Fragment {
 
     private static class DifferenceStat {
         int rowIndex;
+        String side = "";
         Map<String, PairData> pairDataMap = new HashMap<>();
 
         DifferenceStat(int rowIndex) {
             this.rowIndex = rowIndex;
+        }
+
+        void setSide(String side) {
+            this.side = side != null ? side : "";
+        }
+
+        String getSide() {
+            return side;
         }
 
         void addPair(String pairName, double targetDiff, double measuredDiff, double deviation) {
