@@ -151,7 +151,7 @@ public class DataSample {
 
     // НОВЫЙ ГЕТТЕР
     public String getSide() {
-        return side;
+        return side != null ? side : "";
     }
 
     // НОВЫЙ СЕТТЕР
@@ -163,7 +163,7 @@ public class DataSample {
      * Получить полный индекс стропы верхнего яруса (например: "a4l", "b2r")
      */
     public String getFullIndex() {
-        String rowLetter = getColString().toLowerCase(); // "a", "b", "c"
+        String rowLetter = getColString().toLowerCase();
         int number = rowIndex + 1;
         String sideStr = side.isEmpty() ? "" : side;
         return rowLetter + number + sideStr;
@@ -174,7 +174,10 @@ public class DataSample {
      */
     public String getLowerIndex() {
         String rowLetter = getColString(); // "A", "B", "C"
+        // Если сторона не указана, просто добавляем номер стропы нижнего яруса
+        // Если сторона указана, добавляем её (заглавную)
         String sideStr = side.isEmpty() ? "" : side.toUpperCase();
+        // Пример: A1, AL1, A2, AR2, B1, BL1, B2, BR2 и т.д.
         return rowLetter + sideStr + lowerTierNumber;
     }
 

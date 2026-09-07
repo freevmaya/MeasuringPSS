@@ -215,20 +215,12 @@ public class MainActivity extends AppCompatActivity {
         if (dataManager.isCsvLoaded()) {
             // Если очередь пуста или текущий индекс вышел за пределы
             if (measurementQueue.isEmpty() || currentQueueIndex >= measurementQueue.size()) {
-                measurementQueue.clear();
-                currentQueueIndex = 0;
                 buildMeasurementQueue();
+                // Если очередь не пуста, обновляем статус
                 if (!measurementQueue.isEmpty()) {
-                    // Обновляем текущие индексы
-                    MeasurementTarget target = getCurrentTarget();
-                    if (target != null) {
-                        currentColumnIndex = target.col;
-                        currentRowIndex = target.row;
-                    }
                     updateStatusForCurrentTarget();
-                    isTableDataExhausted = false;
                 } else {
-                    tvStatus.setText("⚠️ Нет данных для измерений.");
+                    tvStatus.setText("⚠️ Нет данных для измерений. Загрузите CSV.");
                 }
             }
         }
@@ -678,28 +670,20 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        // Получаем последнюю запись перед удалением
+        DataSample lastSample = limitDataList.get(limitDataList.size() - 1);
+        int removedCol = lastSample.getCol();
+        int removedRow = lastSample.getRowIndex();
+        String removedSide = lastSample.getSide();
+
+        // Удаляем последнюю запись
         limitDataList.remove(limitDataList.size() - 1);
 
-        // Сбрасываем очередь и перестраиваем её
-        measurementQueue.clear();
-        currentQueueIndex = 0;
-        buildMeasurementQueue();
-
-        if (measurementQueue.isEmpty()) {
-            currentRowIndex = 0;
-            currentColumnIndex = 0;
-            isTableDataExhausted = false;
-        } else {
-            MeasurementTarget target = getCurrentTarget();
-            if (target != null) {
-                currentRowIndex = target.row;
-                currentColumnIndex = target.col;
-            }
-        }
-
+        // Очищаем буферы
         weightOverLimitBuffer.clear();
         distanceBuffer.clear();
 
+        // Пересчитываем динамическую коррекцию
         int settingsDistanceAdd = appSettings.getDistanceAdd();
         if (settingsDistanceAdd == 0) {
             if (limitDataList.isEmpty()) {
@@ -708,10 +692,43 @@ public class MainActivity extends AppCompatActivity {
                 dynamicDistanceAdd = calculateDynamicDistanceAdd();
                 recalculateAllDataSamples();
             }
+        }
+
+        // ВАЖНО: Не сбрасываем очередь полностью, а обновляем ее состояние
+        // Находим индекс удаленной записи в очереди
+        int targetQueueIndex = -1;
+        for (int i = 0; i < measurementQueue.size(); i++) {
+            MeasurementTarget target = measurementQueue.get(i);
+            if (target.col == removedCol && target.row == removedRow &&
+                    (target.side == null ? "" : target.side).equals(removedSide)) {
+                targetQueueIndex = i;
+                break;
+            }
+        }
+
+        if (targetQueueIndex != -1) {
+            // Устанавливаем текущий индекс на удаленную запись
+            // Это позволит при следующем измерении перезаписать ее
+            currentQueueIndex = targetQueueIndex;
+
+            // Обновляем текущие координаты
+            MeasurementTarget currentTarget = getCurrentTarget();
+            if (currentTarget != null) {
+                currentColumnIndex = currentTarget.col;
+                currentRowIndex = currentTarget.row;
+                updateStatusForCurrentTarget();
+            }
         } else {
+            // Если запись не найдена в очереди (например, очередь была перестроена),
+            // просто обновляем таблицу
             updateLimitDataTable();
         }
+
+        // Сбрасываем флаг завершения
         isTableDataExhausted = false;
+
+        // Обновляем таблицу
+        updateLimitDataTable();
     }
 
     // ==================== МЕТОДЫ ДЛЯ РАБОТЫ С ОЧЕРЕДЬЮ ИЗМЕРЕНИЙ ====================
@@ -735,15 +752,15 @@ public class MainActivity extends AppCompatActivity {
             int rowCount = dataManager.getRowCount(col);
 
             if (isDualMode) {
-                // Режим "Две консоли":
-                // Сначала левая (от большего row к меньшему)
+                // --- РЕЖИМ "ДВЕ КОНСОЛИ" (как в документации) ---
+                // 1. Все левые стропы (от последней к первой)
                 for (int row = rowCount - 1; row >= 0; row--) {
                     String value = dataManager.getCellValue(row, col);
                     if (value != null && !value.trim().isEmpty()) {
                         measurementQueue.add(new MeasurementTarget(col, row, "l"));
                     }
                 }
-                // Затем правая (от меньшего row к большему)
+                // 2. Все правые стропы (от первой к последней)
                 for (int row = 0; row < rowCount; row++) {
                     String value = dataManager.getCellValue(row, col);
                     if (value != null && !value.trim().isEmpty()) {
@@ -751,14 +768,29 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
             } else {
-                // Режим "Одна консоль" - как раньше
+                // --- РЕЖИМ "ОДНА КОНСОЛЬ" (как в документации) ---
                 for (int row = 0; row < rowCount; row++) {
                     String value = dataManager.getCellValue(row, col);
                     if (value != null && !value.trim().isEmpty()) {
-                        measurementQueue.add(new MeasurementTarget(col, row, ""));
+                        measurementQueue.add(new MeasurementTarget(col, row, "")); // side пустой
                     }
                 }
             }
+        }
+
+        // СИНХРОНИЗИРУЕМ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ С ПЕРВОЙ ЦЕЛЬЮ
+        syncCurrentIndexesWithQueue();
+    }
+
+    /**
+     * Синхронизирует currentRowIndex и currentColumnIndex с первой целью в очереди.
+     * Это гарантирует, что первое измерение будет иметь правильный индекс.
+     */
+    private void syncCurrentIndexesWithQueue() {
+        MeasurementTarget firstTarget = getCurrentTarget();
+        if (firstTarget != null) {
+            currentColumnIndex = firstTarget.col;
+            currentRowIndex = firstTarget.row;
         }
     }
 
@@ -782,6 +814,7 @@ public class MainActivity extends AppCompatActivity {
             currentColumnIndex = next.col;
             currentRowIndex = next.row;
             updateStatusForCurrentTarget();
+            isTableDataExhausted = false; // Сбрасываем флаг, если есть следующая цель
         } else {
             isTableDataExhausted = true;
             tvStatus.setText("✅ Все данные из таблицы обработаны!");
@@ -798,6 +831,12 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        // Обновляем глобальные индексы, если они не совпадают с целевыми
+        if (currentColumnIndex != target.col || currentRowIndex != target.row) {
+            currentColumnIndex = target.col;
+            currentRowIndex = target.row;
+        }
+
         String colLetter = getColumnLetter(target.col);
         String rowNum = String.valueOf(target.row + 1);
         String sideDisplay = "";
@@ -805,6 +844,7 @@ public class MainActivity extends AppCompatActivity {
             sideDisplay = target.side.equals("l") ? " (левая)" : " (правая)";
         }
 
+        // Используем правильное формирование индекса: a4l, b2r и т.д.
         String index = colLetter.toLowerCase() + rowNum + target.side;
         String statusMsg = String.format("⏳ Ожидание превышения веса для стропы %s%s", index, sideDisplay);
         tvStatus.setText(statusMsg);
@@ -815,31 +855,28 @@ public class MainActivity extends AppCompatActivity {
      * @return true если данные закончились
      */
     private boolean advanceToNextTableCell() {
-        DataManager dataManager = DataManager.getInstance();
-        if (!dataManager.isCsvLoaded()) {
+        if (measurementQueue.isEmpty()) {
             isTableDataExhausted = true;
             return true;
         }
 
-        if (measurementQueue.isEmpty()) {
-            buildMeasurementQueue();
-        }
-
-        advanceToNextTarget();
+        advanceToNextTarget(); // Переходим к следующему элементу в очереди
 
         if (isTableDataExhausted) {
             return true;
         }
 
+        // Проверяем, что следующая цель существует и не пуста
         MeasurementTarget target = getCurrentTarget();
         while (target != null) {
-            String value = dataManager.getCellValue(target.row, target.col);
+            String value = DataManager.getInstance().getCellValue(target.row, target.col);
             if (value != null && !value.trim().isEmpty()) {
                 currentColumnIndex = target.col;
                 currentRowIndex = target.row;
                 updateStatusForCurrentTarget();
-                return false;
+                return false; // Успешно перешли на следующую ячейку
             }
+            // Если ячейка пуста, пропускаем её
             advanceToNextTarget();
             target = getCurrentTarget();
         }

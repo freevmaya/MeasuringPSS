@@ -73,7 +73,6 @@ public class StatisticsFragment extends Fragment {
         }
 
         // Группировка по нижней стропе + сторона
-        // Ключ: "AL1", "AR2", "BL3" и т.д.
         Map<String, List<Double>> groups = new HashMap<>();
 
         int skippedRecords = 0;
@@ -83,7 +82,6 @@ public class StatisticsFragment extends Fragment {
                 continue;
             }
 
-            // Используем новый метод getLowerIndex()
             String groupKey = sample.getLowerIndex();
             groups.computeIfAbsent(groupKey, k -> new ArrayList<>())
                     .add(sample.getDiff());
@@ -98,24 +96,30 @@ public class StatisticsFragment extends Fragment {
             return;
         }
 
-        // Сортировка ключей
+        // Сортировка ключей: по ряду (A,B,C), затем по стороне (L, R), затем по номеру
         List<String> sortedKeys = new ArrayList<>(groups.keySet());
         Collections.sort(sortedKeys, (a, b) -> {
             try {
-                // Сортировка: AL1, AL2, AL3, AR1, AR2, BL1, BL2, ...
+                // Извлекаем букву ряда (первый символ)
                 char charA = a.charAt(0);
                 char charB = b.charAt(0);
                 if (charA != charB) {
                     return Character.compare(charA, charB);
                 }
-                // Сравниваем сторону (L < R)
-                char sideA = a.charAt(1);
-                char sideB = b.charAt(1);
-                if (sideA != sideB) {
-                    return Character.compare(sideA, sideB);
+                // Если есть сторона (второй символ - L или R)
+                // Если длина ключа > 2, значит есть сторона
+                String sideA = a.length() > 2 ? a.substring(1, 2) : "";
+                String sideB = b.length() > 2 ? b.substring(1, 2) : "";
+                if (!sideA.equals(sideB)) {
+                    if (sideA.isEmpty()) return -1; // Без стороны идут первыми
+                    if (sideB.isEmpty()) return 1;
+                    return sideA.compareTo(sideB); // L < R
                 }
-                int numA = Integer.parseInt(a.substring(2));
-                int numB = Integer.parseInt(b.substring(2));
+                // Извлекаем номер (последние символы)
+                int startIdxA = sideA.isEmpty() ? 1 : 2;
+                int startIdxB = sideB.isEmpty() ? 1 : 2;
+                int numA = Integer.parseInt(a.substring(startIdxA));
+                int numB = Integer.parseInt(b.substring(startIdxB));
                 return Integer.compare(numA, numB);
             } catch (NumberFormatException | StringIndexOutOfBoundsException e) {
                 return a.compareTo(b);
