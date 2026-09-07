@@ -1,4 +1,3 @@
-// app/src/main/java/vmaya/para/measuringpss/SoundManager.java
 package vmaya.para.measuringpss;
 
 import android.content.Context;
@@ -26,28 +25,20 @@ public class SoundManager {
         return instance;
     }
 
-    /**
-     * Загружает звук из ресурсов
-     */
     private void loadSound() {
         try {
-            // Пытаемся загрузить из res/raw/click.mp3
-            // ID ресурса будет сгенерирован автоматически как R.raw.click
             int soundResId = context.getResources().getIdentifier(
-                    "click",  // имя файла без расширения
-                    "raw",    // тип ресурса
+                    "click",
+                    "raw",
                     context.getPackageName()
             );
 
-            // Если файл не найден через getIdentifier, пробуем прямой доступ
             if (soundResId == 0) {
-                // Пробуем получить ресурс через R класс (если доступен)
                 try {
-                    // Это сработает если файл есть в res/raw/
                     soundResId = context.getResources().getIdentifier(
                             "click",
                             "raw",
-                            "vmaya.para.measuringpss"  // ваш package name
+                            "vmaya.para.measuringpss"
                     );
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -57,7 +48,6 @@ public class SoundManager {
             if (soundResId != 0) {
                 loadSoundFromResource(soundResId);
             } else {
-                // Если файл не найден, пробуем системный звук
                 loadSystemSound();
             }
 
@@ -67,13 +57,10 @@ public class SoundManager {
         }
     }
 
-    /**
-     * Загружает звук из ресурса по ID
-     */
     private void loadSoundFromResource(int resId) {
         try {
             AudioAttributes audioAttributes = new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .setUsage(AudioAttributes.USAGE_MEDIA)  // Изменено с USAGE_NOTIFICATION
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build();
 
@@ -83,7 +70,7 @@ public class SoundManager {
                         .setAudioAttributes(audioAttributes)
                         .build();
             } else {
-                soundPool = new SoundPool(1, AudioManager.STREAM_NOTIFICATION, 0);
+                soundPool = new SoundPool(1, AudioManager.STREAM_MUSIC, 0);  // Изменено с STREAM_NOTIFICATION
             }
 
             soundPool.setOnLoadCompleteListener((pool, sampleId, status) -> {
@@ -95,7 +82,6 @@ public class SoundManager {
 
             soundId = soundPool.load(context, resId, 1);
 
-            // Ждем загрузки (максимум 500 мс)
             int waitCount = 0;
             while (!isLoaded && waitCount < 50) {
                 try {
@@ -111,13 +97,10 @@ public class SoundManager {
         }
     }
 
-    /**
-     * Загружает системный звук как fallback
-     */
     private void loadSystemSound() {
         try {
             AudioAttributes audioAttributes = new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .setUsage(AudioAttributes.USAGE_MEDIA)  // Изменено с USAGE_NOTIFICATION
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build();
 
@@ -127,10 +110,9 @@ public class SoundManager {
                         .setAudioAttributes(audioAttributes)
                         .build();
             } else {
-                soundPool = new SoundPool(1, AudioManager.STREAM_NOTIFICATION, 0);
+                soundPool = new SoundPool(1, AudioManager.STREAM_MUSIC, 0);  // Изменено с STREAM_NOTIFICATION
             }
 
-            // Пробуем разные системные звуки
             String[] soundPaths = {
                     "/system/media/audio/ui/KeypressStandard.ogg",
                     "/system/media/audio/ui/KeypressSpacebar.ogg",
@@ -147,7 +129,6 @@ public class SoundManager {
                             soundId = sampleId;
                         }
                     });
-                    // Ждем загрузки
                     try {
                         Thread.sleep(100);
                     } catch (InterruptedException e) {
@@ -159,7 +140,6 @@ public class SoundManager {
                 }
             }
 
-            // Если ничего не загрузилось, помечаем как не загруженный
             isLoaded = false;
 
         } catch (Exception e) {
@@ -168,9 +148,6 @@ public class SoundManager {
         }
     }
 
-    /**
-     * Воспроизводит звук
-     */
     public void playClickSound() {
         if (soundPool != null && isLoaded && soundId != 0) {
             try {
@@ -183,9 +160,6 @@ public class SoundManager {
         vibrate();
     }
 
-    /**
-     * Освобождает ресурсы
-     */
     public void release() {
         if (soundPool != null) {
             try {
@@ -215,13 +189,13 @@ public class SoundManager {
         try {
             AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
             if (audioManager != null) {
-                // Проверяем громкость
-                int volume = audioManager.getStreamVolume(AudioManager.STREAM_NOTIFICATION);
-                int maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_NOTIFICATION);
-                android.util.Log.d("SoundManager", "Notification volume: " + volume + "/" + maxVolume);
+                // Изменено на STREAM_MUSIC
+                int volume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+                int maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                android.util.Log.d("SoundManager", "Music volume: " + volume + "/" + maxVolume);
 
                 if (volume == 0) {
-                    android.util.Log.d("SoundManager", "Volume is ZERO!");
+                    android.util.Log.d("SoundManager", "Music volume is ZERO!");
                 }
             }
         } catch (Exception e) {
