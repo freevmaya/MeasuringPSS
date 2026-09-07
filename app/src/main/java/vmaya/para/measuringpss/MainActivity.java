@@ -1379,7 +1379,6 @@ public class MainActivity extends AppCompatActivity {
 
             MeasurementTarget target = getCurrentTarget();
             if (target == null) {
-                // Пытаемся перейти к следующей цели
                 advanceToNextTarget();
                 target = getCurrentTarget();
                 if (target == null) {
@@ -1406,6 +1405,8 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
 
+            // --- ЗВУК ДЛЯ ПЕРВОГО ЗАМЕРА ---
+            // Воспроизводим звук клика при каждом получении данных от датчика
             soundManager.playClickSound();
 
             double diff = correctedDistance - csvValue;
@@ -1432,6 +1433,10 @@ public class MainActivity extends AppCompatActivity {
                 double avgDiff = avgDistance - lastCsvValue;
 
                 String side = target.side;
+
+                // --- ЗВУК ДЛЯ ЗАПИСИ В ТАБЛИЦУ ---
+                // Воспроизводим звук записи (основной звук)
+                soundManager.playRecordSound();
 
                 addLimitDataRecord(
                         correctedWeight,
