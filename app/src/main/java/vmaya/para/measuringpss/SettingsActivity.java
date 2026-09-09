@@ -63,6 +63,22 @@ public class SettingsActivity extends AppCompatActivity {
                 });
             }
 
+            // НОВЫЙ ПАРАМЕТР: Коррекция по рядам
+            SwitchPreferenceCompat correctionPerRowPref = findPreference(AppSettings.KEY_CORRECTION_PER_ROW);
+            if (correctionPerRowPref != null) {
+                boolean isChecked = correctionPerRowPref.isChecked();
+                correctionPerRowPref.setSummary(isChecked ?
+                        "Вкл. — коррекция для каждого ряда отдельно" :
+                        "Выкл. — одна общая коррекция");
+                correctionPerRowPref.setOnPreferenceChangeListener((preference, newValue) -> {
+                    boolean isCheckedNew = (boolean) newValue;
+                    correctionPerRowPref.setSummary(isCheckedNew ?
+                            "Вкл. — коррекция для каждого ряда отдельно" :
+                            "Выкл. — одна общая коррекция");
+                    return true;
+                });
+            }
+
             // Предел
             EditTextPreference weightLimitPref = findPreference(AppSettings.KEY_WEIGHT_LIMIT);
             if (weightLimitPref != null) {
@@ -121,7 +137,7 @@ public class SettingsActivity extends AppCompatActivity {
                 });
             }
 
-            // НОВЫЙ ПАРАМЕТР: Режим измерения
+            // Режим измерения
             ListPreference measurementModePref = findPreference(AppSettings.KEY_MEASUREMENT_MODE);
             if (measurementModePref != null) {
                 String value = measurementModePref.getValue();

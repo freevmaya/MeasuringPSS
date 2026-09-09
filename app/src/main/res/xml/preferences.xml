@@ -14,6 +14,13 @@
         android:defaultValue="0"
         android:inputType="number" />
 
+    <!-- НОВЫЙ ПАРАМЕТР: Коррекция по рядам -->
+    <SwitchPreferenceCompat
+        android:key="correction_per_row"
+        android:title="Коррекция по рядам"
+        android:summary="Вкл. — коррекция для каждого ряда отдельно; Выкл. — одна общая коррекция"
+        android:defaultValue="false" />
+
     <EditTextPreference
         android:key="weight_limit"
         android:title="Предел веса"
@@ -37,7 +44,6 @@
         android:inputType="number"
         android:maxLength="3" />
 
-    <!-- НОВЫЙ ПАРАМЕТР: Режим измерения -->
     <ListPreference
         android:key="measurement_mode"
         android:title="Режим измерения"

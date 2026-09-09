@@ -13,7 +13,8 @@ public class AppSettings {
     public static final String KEY_MEASUREMENT_COUNT = "measurement_count";
     public static final String KEY_DIFF_THRESHOLD = "diff_threshold";
     public static final String KEY_KEEP_SCREEN_ON = "keep_screen_on";
-    public static final String KEY_MEASUREMENT_MODE = "measurement_mode"; // НОВЫЙ КЛЮЧ
+    public static final String KEY_MEASUREMENT_MODE = "measurement_mode";
+    public static final String KEY_CORRECTION_PER_ROW = "correction_per_row"; // НОВЫЙ КЛЮЧ
 
     // Значения по умолчанию
     public static final double DEFAULT_WEIGHT_CF = 1.0;
@@ -22,7 +23,8 @@ public class AppSettings {
     public static final int DEFAULT_MEASUREMENT_COUNT = 1;
     public static final int DEFAULT_DIFF_THRESHOLD = 20;
     public static final boolean DEFAULT_KEEP_SCREEN_ON = true;
-    public static final String DEFAULT_MEASUREMENT_MODE = "single"; // "single" или "dual"
+    public static final String DEFAULT_MEASUREMENT_MODE = "single";
+    public static final boolean DEFAULT_CORRECTION_PER_ROW = false; // НОВЫЙ ПАРАМЕТР
 
     private final SharedPreferences sharedPreferences;
 
@@ -107,7 +109,6 @@ public class AppSettings {
         sharedPreferences.edit().putBoolean(KEY_KEEP_SCREEN_ON, keepScreenOn).apply();
     }
 
-    // НОВЫЙ МЕТОД: получение режима измерения
     public String getMeasurementMode() {
         return sharedPreferences.getString(KEY_MEASUREMENT_MODE, DEFAULT_MEASUREMENT_MODE);
     }
@@ -116,8 +117,16 @@ public class AppSettings {
         sharedPreferences.edit().putString(KEY_MEASUREMENT_MODE, mode).apply();
     }
 
-    // НОВЫЙ МЕТОД: проверка режима "Две консоли"
     public boolean isDualMode() {
         return "dual".equals(getMeasurementMode());
+    }
+
+    // НОВЫЙ МЕТОД: получение настройки "Коррекция по рядам"
+    public boolean isCorrectionPerRow() {
+        return sharedPreferences.getBoolean(KEY_CORRECTION_PER_ROW, DEFAULT_CORRECTION_PER_ROW);
+    }
+
+    public void setCorrectionPerRow(boolean enabled) {
+        sharedPreferences.edit().putBoolean(KEY_CORRECTION_PER_ROW, enabled).apply();
     }
 }
