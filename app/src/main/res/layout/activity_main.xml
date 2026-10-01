@@ -26,15 +26,6 @@
         android:textStyle="bold" />
 
     <!-- RAW данные -->
-    <TextView
-        android:id="@+id/tvRawData"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="📨 Ожидание данных..."
-        android:textSize="14sp"
-        android:padding="8dp"
-        android:maxLines="2"
-        android:ellipsize="end" />
 
     <!-- Кнопки управления -->
     <LinearLayout

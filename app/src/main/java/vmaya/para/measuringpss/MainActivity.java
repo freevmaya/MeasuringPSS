@@ -36,6 +36,7 @@ import android.widget.TableLayout;
 import android.widget.TableRow;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.documentfile.provider.DocumentFile;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
@@ -45,6 +46,8 @@ import androidx.core.content.ContextCompat;
 
 import com.google.gson.Gson;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -70,7 +73,6 @@ public class MainActivity extends AppCompatActivity {
 
     private TextView tvStatus;
     private TextView tvWeightDistance;
-    private TextView tvRawData;
     private TableLayout tableLimitData;
     private ScrollView limitDataScrollView;
     private Button btnScan;
@@ -139,7 +141,6 @@ public class MainActivity extends AppCompatActivity {
         // Инициализация UI
         tvStatus = findViewById(R.id.tvStatus);
         tvWeightDistance = findViewById(R.id.tvWeightDistance);
-        tvRawData = findViewById(R.id.tvRawData);
         tableLimitData = findViewById(R.id.tableLimitData);
         limitDataScrollView = findViewById(R.id.limitDataScrollView);
         btnScan = findViewById(R.id.btnScan);
@@ -333,7 +334,8 @@ public class MainActivity extends AppCompatActivity {
                     .append(diff).append("\n");
         }
 
-        boolean success = saveFile(newFileName, csvContent.toString());
+        // Вызываем обновленный метод saveFile с URI исходного файла
+        boolean success = saveFile(originalUri, newFileName, csvContent.toString());
 
         if (success) {
             Toast.makeText(this, "Файл сохранен: " + newFileName, Toast.LENGTH_LONG).show();
@@ -343,9 +345,62 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Вспомогательный метод для сохранения строки в файл с использованием MediaStore (Android 10+)
+     * Сохраняет файл в ту же папку, что и исходный файл, используя DocumentFile.
+     *
+     * @param originalFileUri URI исходного файла, чтобы определить папку.
+     * @param fileName        Имя нового файла.
+     * @param content         Содержимое файла.
+     * @return true, если сохранение прошло успешно, иначе false.
      */
-    private boolean saveFile(String fileName, String content) {
+    private boolean saveFile(Uri originalFileUri, String fileName, String content) {
+        // Преобразуем URI исходного файла в DocumentFile
+        DocumentFile originalDocumentFile = DocumentFile.fromSingleUri(this, originalFileUri);
+        DocumentFile parentFolder = originalDocumentFile.getParentFile();
+        String fileNameFull = fileName;
+        if (parentFolder != null)
+            fileNameFull = parentFolder.getName() + "-" + fileName;
+
+        if (originalDocumentFile == null || !originalDocumentFile.exists()) {
+            return saveFileLegacy(fileNameFull, content);
+        }
+
+        if (parentFolder == null) {
+            return saveFileLegacy(fileNameFull, content);
+        }
+
+        // Запрашиваем разрешение на запись в эту папку
+        try {
+            getContentResolver().takePersistableUriPermission(parentFolder.getUri(),
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+        } catch (SecurityException e) {
+            e.printStackTrace();
+            // Если не удалось получить разрешение, пробуем старый способ (может не работать на новых версиях)
+            return saveFileLegacy(fileName, content);
+        }
+
+        // Создаем новый файл в этой папке
+        DocumentFile newFile = parentFolder.createFile("text/csv", fileName);
+        if (newFile == null) {
+            return false;
+        }
+
+        // Записываем данные в новый файл
+        try (OutputStream os = getContentResolver().openOutputStream(newFile.getUri())) {
+            if (os == null) {
+                return false;
+            }
+            os.write(content.getBytes(StandardCharsets.UTF_8));
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Старый метод сохранения в папку Downloads (для совместимости).
+     */
+    private boolean saveFileLegacy(String fileName, String content) {
         ContentResolver resolver = getContentResolver();
         ContentValues contentValues = new ContentValues();
 
@@ -355,12 +410,12 @@ public class MainActivity extends AppCompatActivity {
             contentValues.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
         } else {
             try {
-                java.io.File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-                java.io.File file = new java.io.File(downloadsDir, fileName);
+                File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                File file = new File(downloadsDir, fileName);
                 if (!downloadsDir.exists() && !downloadsDir.mkdirs()) {
                     return false;
                 }
-                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
+                try (FileOutputStream fos = new FileOutputStream(file)) {
                     fos.write(content.getBytes(StandardCharsets.UTF_8));
                     return true;
                 }
@@ -1397,7 +1452,6 @@ public class MainActivity extends AppCompatActivity {
             if (validJson == null) {
                 if (buffer.length() > 1000) {
                     jsonBuffer.setLength(0);
-                    tvRawData.setText("📨 Буфер очищен (слишком большой)");
                 }
                 return;
             }
@@ -1405,7 +1459,6 @@ public class MainActivity extends AppCompatActivity {
             int processedEnd = buffer.indexOf(validJson) + validJson.length();
             jsonBuffer.delete(0, processedEnd);
 
-            tvRawData.setText("📨 RAW: " + validJson);
 
             try {
                 DataModel dataModel = gson.fromJson(validJson, DataModel.class);
@@ -1642,7 +1695,6 @@ public class MainActivity extends AppCompatActivity {
 
         if (!connected) {
             tvWeightDistance.setText("⚖️: --, 📏: --");
-            tvRawData.setText("📨 Ожидание данных...");
         }
     }
 
