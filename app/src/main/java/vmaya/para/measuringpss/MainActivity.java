@@ -307,6 +307,7 @@ public class MainActivity extends AppCompatActivity {
      * - теперь сохраняет и без загруженного CSV;
      * - без CSV имя файла: measuring_<метод>_YYYYMMDD_HHmm.csv, сохранение в Downloads;
      * - без CSV колонка "Расчет" содержит только distance, "Разница" — прочерк.
+     * - при источнике "каталог" (currentFileUri == null) сохраняем в Downloads.
      */
     private void saveDiffData() {
         DataManager dataManager = DataManager.getInstance();
@@ -317,6 +318,8 @@ public class MainActivity extends AppCompatActivity {
         }
 
         boolean hasCsvData = dataManager.isCsvLoaded();
+        Uri originalUri = hasCsvData ? dataManager.getCurrentFileUri() : null;
+        boolean isCatalogSource = hasCsvData && originalUri == null;
 
         // Формируем имя файла
         String newFileName;
@@ -361,14 +364,11 @@ public class MainActivity extends AppCompatActivity {
         }
 
         boolean success;
-        if (hasCsvData) {
-            Uri originalUri = dataManager.getCurrentFileUri();
-            if (originalUri == null) {
-                Toast.makeText(this, "Не удалось определить путь к оригинальному файлу.", Toast.LENGTH_LONG).show();
-                return;
-            }
+        if (hasCsvData && !isCatalogSource) {
+            // Источник — файл: сохраняем рядом с оригиналом
             success = saveFile(originalUri, newFileName, csvContent.toString());
         } else {
+            // Источник — каталог или CSV не загружен: сохраняем в Downloads
             success = saveFileLegacy(newFileName, csvContent.toString());
         }
 

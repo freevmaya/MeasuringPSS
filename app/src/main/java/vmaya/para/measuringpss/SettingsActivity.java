@@ -276,6 +276,24 @@ public class SettingsActivity extends AppCompatActivity {
                     return true;
                 });
             }
+
+            // Базовый URL каталога
+            EditTextPreference catalogBaseUrlPref = findPreference(AppSettings.KEY_CATALOG_BASE_URL);
+            if (catalogBaseUrlPref != null) {
+                String text = catalogBaseUrlPref.getText();
+                if (text == null || text.trim().isEmpty()) {
+                    text = AppSettings.DEFAULT_CATALOG_BASE_URL;
+                }
+                catalogBaseUrlPref.setSummary("Текущий URL: " + text);
+                catalogBaseUrlPref.setOnPreferenceChangeListener((preference, newValue) -> {
+                    String value = newValue != null ? newValue.toString().trim() : "";
+                    if (value.isEmpty()) {
+                        value = AppSettings.DEFAULT_CATALOG_BASE_URL;
+                    }
+                    catalogBaseUrlPref.setSummary("Текущий URL: " + value);
+                    return true;
+                });
+            }
         }
     }
 }

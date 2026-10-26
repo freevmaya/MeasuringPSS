@@ -18,6 +18,8 @@ public class AppSettings {
     public static final String KEY_CORRECTION_MODE = "correction_mode";
     // НОВЫЙ КЛЮЧ: методика замера (заменяет measurement_count)
     public static final String KEY_MEASUREMENT_METHOD = "measurement_method";
+    // НОВЫЙ КЛЮЧ: базовый URL каталога
+    public static final String KEY_CATALOG_BASE_URL = "catalog_base_url";
 
     // Значения по умолчанию
     public static final double DEFAULT_WEIGHT_CF = -0.012;
@@ -31,6 +33,8 @@ public class AppSettings {
     public static final String DEFAULT_CORRECTION_MODE = "global";
     // НОВОЕ ЗНАЧЕНИЕ ПО УМОЛЧАНИЮ ДЛЯ МЕТОДИКИ ЗАМЕРА
     public static final String DEFAULT_MEASUREMENT_METHOD = "method_1";
+    // НОВОЕ ЗНАЧЕНИЕ ПО УМОЛЧАНИЮ ДЛЯ БАЗОВОГО URL КАТАЛОГА
+    public static final String DEFAULT_CATALOG_BASE_URL = "parasell.vmaya.ru";
 
     // Значения режимов коррекции
     public static final String CORRECTION_MODE_GLOBAL = "global";
@@ -301,5 +305,39 @@ public class AppSettings {
      */
     public boolean isCorrectionModeSpecificRow() {
         return getCorrectionModeRowIndex() >= 0;
+    }
+
+    // ==================== БАЗОВЫЙ URL КАТАЛОГА ====================
+
+    /**
+     * Возвращает базовый URL каталога в нормализованном виде:
+     * - если пусто — DEFAULT_CATALOG_BASE_URL;
+     * - добавляет https:// если протокол не указан;
+     * - убирает завершающие слэши.
+     */
+    public String getCatalogBaseUrl() {
+        String value = sharedPreferences.getString(KEY_CATALOG_BASE_URL, DEFAULT_CATALOG_BASE_URL);
+        if (value == null) {
+            value = DEFAULT_CATALOG_BASE_URL;
+        }
+        value = value.trim();
+        if (value.isEmpty()) {
+            value = DEFAULT_CATALOG_BASE_URL;
+        }
+        String lower = value.toLowerCase();
+        if (!lower.startsWith("http://") && !lower.startsWith("https://")) {
+            value = "https://" + value;
+        }
+        while (value.endsWith("/")) {
+            value = value.substring(0, value.length() - 1);
+        }
+        return value;
+    }
+
+    public void setCatalogBaseUrl(String url) {
+        if (url == null) {
+            url = DEFAULT_CATALOG_BASE_URL;
+        }
+        sharedPreferences.edit().putString(KEY_CATALOG_BASE_URL, url.trim()).apply();
     }
 }

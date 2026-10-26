@@ -2,12 +2,16 @@
 package vmaya.para.measuringpss;
 
 import android.Manifest;
+import android.app.AlertDialog;
+import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.OpenableColumns;
 import android.view.MenuItem;
 import android.view.View;
@@ -40,10 +44,20 @@ public class DataTableActivity extends AppCompatActivity {
     private TextView tvFileName;
     private TextView tvMinMaxDifference;
 
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final CatalogApiClient catalogApiClient = new CatalogApiClient();
+    private AppSettings appSettings;
+
+    // Кэш в рамках сессии активности
+    private List<CatalogModels.Manufacturer> cachedManufacturers = null;
+    private final java.util.Map<Integer, List<CatalogModels.Wing>> cachedWingsByManufacturer = new java.util.HashMap<>();
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_data_table);
+
+        appSettings = new AppSettings(this);
 
         // Настройка Toolbar с кнопкой назад
         Toolbar toolbar = findViewById(R.id.toolbar);
@@ -58,7 +72,7 @@ public class DataTableActivity extends AppCompatActivity {
         tvFileName = findViewById(R.id.tvFileName);
         tvMinMaxDifference = findViewById(R.id.tvMinMaxDifference);
 
-        btnLoadCsv.setOnClickListener(v -> loadCsvFile());
+        btnLoadCsv.setOnClickListener(v -> showSourceDialog());
 
         // Проверяем, есть ли уже загруженные данные
         displayExistingData();
@@ -73,52 +87,27 @@ public class DataTableActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
-    /**
-     * Отображает уже загруженные данные, если они есть
-     */
-    private void displayExistingData() {
-        DataManager dataManager = DataManager.getInstance();
-
-        if (dataManager.isCsvLoaded()) {
-            List<String[]> data = dataManager.getCsvData();
-            String fileName = dataManager.getCurrentFileName();
-
-            if (data != null && !data.isEmpty()) {
-                // Показываем имя файла
-                if (tvFileName != null) {
-                    tvFileName.setText("📄 " + fileName);
-                    tvFileName.setVisibility(View.VISIBLE);
-                }
-
-                // Отображаем таблицу
-                displayTable(data);
-
-                Toast.makeText(this,
-                        "Загружено " + data.size() + " записей из " + fileName,
-                        Toast.LENGTH_SHORT).show();
-                return;
-            }
-        }
-
-        // Если данных нет, показываем сообщение
-        if (tvFileName != null) {
-            tvFileName.setText("📄 Данные не загружены");
-            tvFileName.setVisibility(View.VISIBLE);
-        }
-
-        // Показываем пустую таблицу с сообщением
-        showEmptyTable();
-    }
+    // ==================== ВЫБОР ИСТОЧНИКА ====================
 
     /**
-     * Показывает пустую таблицу с сообщением
+     * Диалог выбора источника данных: из файла или из каталога.
      */
-    private void showEmptyTable() {
-        tableData.removeAllViews();
-        String[] emptyRow = {"Загрузите CSV файл для отображения данных"};
-        addTableRow(emptyRow, false, null, null);
-        updateMinMaxDifference(null, null);
+    private void showSourceDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Источник данных");
+        builder.setItems(new CharSequence[]{"Из файла", "Из каталога"},
+                (dialog, which) -> {
+                    if (which == 0) {
+                        loadCsvFile();
+                    } else {
+                        startCatalogLoading();
+                    }
+                });
+        builder.setNegativeButton("Отмена", null);
+        builder.show();
     }
+
+    // ==================== ЗАГРУЗКА ИЗ ФАЙЛА ====================
 
     private void loadCsvFile() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
@@ -327,9 +316,244 @@ public class DataTableActivity extends AppCompatActivity {
         return ',';
     }
 
+    // ==================== ЗАГРУЗКА ИЗ КАТАЛОГА ====================
+
+    private void startCatalogLoading() {
+        if (cachedManufacturers != null) {
+            showManufacturerDialog(cachedManufacturers);
+            return;
+        }
+
+        ProgressDialog progress = createProgressDialog("Загрузка производителей…");
+        progress.show();
+
+        new Thread(() -> {
+            try {
+                String baseUrl = appSettings.getCatalogBaseUrl();
+                List<CatalogModels.Manufacturer> manufacturers =
+                        catalogApiClient.fetchManufacturers(baseUrl);
+                handler.post(() -> {
+                    progress.dismiss();
+                    if (manufacturers.isEmpty()) {
+                        Toast.makeText(DataTableActivity.this,
+                                "Не могу загрузить данные", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    cachedManufacturers = manufacturers;
+                    showManufacturerDialog(manufacturers);
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+                handler.post(() -> {
+                    progress.dismiss();
+                    Toast.makeText(DataTableActivity.this,
+                            "Не могу загрузить данные", Toast.LENGTH_LONG).show();
+                });
+            }
+        }).start();
+    }
+
+    private void showManufacturerDialog(List<CatalogModels.Manufacturer> manufacturers) {
+        if (manufacturers == null || manufacturers.isEmpty()) {
+            Toast.makeText(this, "Не могу загрузить данные", Toast.LENGTH_LONG).show();
+            return;
+        }
+        String[] names = new String[manufacturers.size()];
+        for (int i = 0; i < manufacturers.size(); i++) {
+            names[i] = manufacturers.get(i).name != null
+                    ? manufacturers.get(i).name
+                    : ("Производитель #" + manufacturers.get(i).id);
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("Выберите производителя")
+                .setItems(names, (dialog, which) -> {
+                    CatalogModels.Manufacturer selected = manufacturers.get(which);
+                    startWingLoading(selected);
+                })
+                .setNegativeButton("Отмена", null)
+                .show();
+    }
+
+    private void startWingLoading(CatalogModels.Manufacturer manufacturer) {
+        if (manufacturer == null) {
+            return;
+        }
+        List<CatalogModels.Wing> cached = cachedWingsByManufacturer.get(manufacturer.id);
+        if (cached != null) {
+            showWingDialog(manufacturer, cached);
+            return;
+        }
+
+        ProgressDialog progress = createProgressDialog("Загрузка крыльев…");
+        progress.show();
+
+        new Thread(() -> {
+            try {
+                String baseUrl = appSettings.getCatalogBaseUrl();
+                List<CatalogModels.Wing> wings =
+                        catalogApiClient.fetchWings(baseUrl, manufacturer.id);
+                handler.post(() -> {
+                    progress.dismiss();
+                    if (wings.isEmpty()) {
+                        Toast.makeText(DataTableActivity.this,
+                                "Не могу загрузить данные", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    cachedWingsByManufacturer.put(manufacturer.id, wings);
+                    showWingDialog(manufacturer, wings);
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+                handler.post(() -> {
+                    progress.dismiss();
+                    Toast.makeText(DataTableActivity.this,
+                            "Не могу загрузить данные", Toast.LENGTH_LONG).show();
+                });
+            }
+        }).start();
+    }
+
+    private void showWingDialog(CatalogModels.Manufacturer manufacturer, List<CatalogModels.Wing> wings) {
+        if (wings == null || wings.isEmpty()) {
+            Toast.makeText(this, "Не могу загрузить данные", Toast.LENGTH_LONG).show();
+            return;
+        }
+        String[] names = new String[wings.size()];
+        for (int i = 0; i < wings.size(); i++) {
+            CatalogModels.Wing w = wings.get(i);
+            String display = w.full_name;
+            if (display == null || display.isEmpty()) {
+                display = (w.model != null ? w.model : "Крыло") +
+                        (w.size != null ? " " + w.size : "");
+            }
+            names[i] = display;
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("Выберите крыло")
+                .setItems(names, (dialog, which) -> {
+                    CatalogModels.Wing selected = wings.get(which);
+                    startLinesLoading(selected);
+                })
+                .setPositiveButton("Назад", (dialog, which) -> showManufacturerDialog(cachedManufacturers))
+                .setNegativeButton("Отмена", null)
+                .show();
+    }
+
+    private void startLinesLoading(CatalogModels.Wing wing) {
+        if (wing == null) {
+            return;
+        }
+
+        ProgressDialog progress = createProgressDialog("Загрузка строп…");
+        progress.show();
+
+        new Thread(() -> {
+            try {
+                String baseUrl = appSettings.getCatalogBaseUrl();
+                CatalogModels.LinesData linesData =
+                        catalogApiClient.fetchLines(baseUrl, wing.id);
+                CatalogApiClient.BuildResult buildResult =
+                        catalogApiClient.buildCsvRows(linesData);
+                handler.post(() -> {
+                    progress.dismiss();
+                    onCatalogLoaded(wing, buildResult);
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+                handler.post(() -> {
+                    progress.dismiss();
+                    Toast.makeText(DataTableActivity.this,
+                            "Не могу загрузить данные", Toast.LENGTH_LONG).show();
+                });
+            }
+        }).start();
+    }
+
     /**
-     * Обновляет TextView с разницей между минимальным и максимальным значением
+     * Обрабатывает успешную загрузку каталога: сохраняет CSV в DataManager,
+     * отображает таблицу, показывает итоговые сообщения.
      */
+    private void onCatalogLoaded(CatalogModels.Wing wing, CatalogApiClient.BuildResult buildResult) {
+        if (buildResult == null || buildResult.rows.isEmpty()) {
+            Toast.makeText(this, "Не могу загрузить данные", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        String fullName = wing.full_name;
+        if (fullName == null || fullName.trim().isEmpty()) {
+            fullName = (wing.model != null ? wing.model : "wing");
+            if (wing.size != null && !wing.size.isEmpty()) {
+                fullName += " " + wing.size;
+            }
+        }
+        String fileName = fullName + ".csv";
+
+        // Сохраняем данные в DataManager, без Uri (источник — каталог)
+        DataManager.getInstance().setCsvData(buildResult.rows, fileName, null);
+
+        if (tvFileName != null) {
+            tvFileName.setText("📄 " + fileName);
+            tvFileName.setVisibility(View.VISIBLE);
+        }
+
+        displayTable(buildResult.rows);
+
+        Toast.makeText(this,
+                "Загружено " + buildResult.rows.size() + " записей из " + fileName,
+                Toast.LENGTH_LONG).show();
+
+        if (buildResult.skippedNonLatinGroups > 0) {
+            Toast.makeText(this,
+                    "Пропущено " + buildResult.skippedNonLatinGroups
+                            + " строп с нелатинским именем",
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private ProgressDialog createProgressDialog(String message) {
+        ProgressDialog progress = new ProgressDialog(this);
+        progress.setMessage(message);
+        progress.setCancelable(false);
+        progress.setCanceledOnTouchOutside(false);
+        return progress;
+    }
+
+    // ==================== ОТОБРАЖЕНИЕ ТАБЛИЦЫ ====================
+
+    private void displayExistingData() {
+        DataManager dataManager = DataManager.getInstance();
+
+        if (dataManager.isCsvLoaded()) {
+            List<String[]> data = dataManager.getCsvData();
+            String fileName = dataManager.getCurrentFileName();
+
+            if (data != null && !data.isEmpty()) {
+                if (tvFileName != null) {
+                    tvFileName.setText("📄 " + fileName);
+                    tvFileName.setVisibility(View.VISIBLE);
+                }
+                displayTable(data);
+                return;
+            }
+        }
+
+        if (tvFileName != null) {
+            tvFileName.setText("📄 Данные не загружены");
+            tvFileName.setVisibility(View.VISIBLE);
+        }
+
+        showEmptyTable();
+    }
+
+    private void showEmptyTable() {
+        tableData.removeAllViews();
+        String[] emptyRow = {"Загрузите CSV файл для отображения данных"};
+        addTableRow(emptyRow, false, null, null);
+        updateMinMaxDifference(null, null);
+    }
+
     private void updateMinMaxDifference(Double minValue, Double maxValue) {
         if (tvMinMaxDifference == null) {
             return;
@@ -347,9 +571,6 @@ public class DataTableActivity extends AppCompatActivity {
         tvMinMaxDifference.setVisibility(View.VISIBLE);
     }
 
-    /**
-     * Отображает таблицу с данными, выделяя минимальное и максимальное значение по всем длинам строп
-     */
     private void displayTable(List<String[]> rows) {
         tableData.removeAllViews();
 
@@ -370,7 +591,6 @@ public class DataTableActivity extends AppCompatActivity {
             return;
         }
 
-        // Находим минимальное и максимальное числовое значение
         Double minValue = null;
         Double maxValue = null;
 
@@ -380,9 +600,7 @@ public class DataTableActivity extends AppCompatActivity {
                     continue;
                 }
                 try {
-                    // Пытаемся распарсить ячейку как число
                     String numericPart = cell.trim().replace(',', '.');
-                    // Если в ячейке есть "/", берем только первую часть
                     if (numericPart.contains("/")) {
                         numericPart = numericPart.split("/")[0];
                     }
@@ -399,14 +617,11 @@ public class DataTableActivity extends AppCompatActivity {
             }
         }
 
-        // Обновляем TextView с разницей
         updateMinMaxDifference(minValue, maxValue);
 
-        // Добавляем заголовки (A, B, C, D, E, ...)
         String[] headers = generateColumnHeaders(maxColumns);
         addTableRow(headers, true, null, null);
 
-        // Добавляем строки данных
         for (String[] row : rows) {
             if (row.length < maxColumns) {
                 String[] newRow = new String[maxColumns];
@@ -442,9 +657,6 @@ public class DataTableActivity extends AppCompatActivity {
         return sb.toString();
     }
 
-    /**
-     * Добавляет строку в таблицу с возможностью выделения минимального и максимального значения
-     */
     private void addTableRow(String[] columns, boolean isHeader, Double minValue, Double maxValue) {
         TableRow tableRow = new TableRow(this);
         tableRow.setLayoutParams(new TableRow.LayoutParams(
@@ -467,7 +679,6 @@ public class DataTableActivity extends AppCompatActivity {
                 textView.setTextSize(16);
                 textView.setTypeface(null, android.graphics.Typeface.BOLD);
             } else {
-                // Проверяем, является ли ячейка числом, и выделяем её, если она равна min или max
                 boolean isMin = false;
                 boolean isMax = false;
                 if (minValue != null && maxValue != null && column != null && !column.isEmpty()) {
@@ -477,7 +688,6 @@ public class DataTableActivity extends AppCompatActivity {
                             numericPart = numericPart.split("/")[0];
                         }
                         double value = Double.parseDouble(numericPart);
-                        // Сравниваем с погрешностью для double
                         if (Math.abs(value - minValue) < 0.0001) {
                             isMin = true;
                         }
@@ -489,14 +699,12 @@ public class DataTableActivity extends AppCompatActivity {
                     }
                 }
 
-                // Устанавливаем цвет фона
                 if (isMin && isMax) {
-                    // Если значение одновременно и минимальное, и максимальное (все значения одинаковы)
-                    textView.setBackgroundColor(0xFF9C27B0); // Фиолетовый
+                    textView.setBackgroundColor(0xFF9C27B0);
                 } else if (isMin) {
-                    textView.setBackgroundColor(0xFFCCCCFF); // Синий
+                    textView.setBackgroundColor(0xFFCCCCFF);
                 } else if (isMax) {
-                    textView.setBackgroundColor(0xFFFFCCCC); // Розовый
+                    textView.setBackgroundColor(0xFFFFCCCC);
                 } else {
                     int position = tableData.getChildCount();
                     if (position % 2 == 1) {

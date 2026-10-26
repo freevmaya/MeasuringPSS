@@ -66,5 +66,13 @@
             android:title="Не гасить экран"
             android:summary="Экран не будет гаснуть"
             android:defaultValue="true" />
+
+        <EditTextPreference
+            android:key="catalog_base_url"
+            android:title="Базовый URL каталога"
+            android:summary="Текущий URL: parasell.vmaya.ru"
+            android:defaultValue="parasell.vmaya.ru"
+            android:dialogTitle="Базовый URL каталога"
+            android:dialogMessage="Например: parasell.vmaya.ru (https:// подставится автоматически)" />
     </PreferenceCategory>
 </PreferenceScreen>
