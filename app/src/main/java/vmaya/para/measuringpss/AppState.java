@@ -9,6 +9,8 @@ public class AppState {
 
     private State currentState = State.EXPECT_DATA;
     private boolean isDataRecordedForCycle = false;
+    // НОВЫЙ ФЛАГ: предупреждение о слишком большом превышении веса уже показано в текущем цикле
+    private boolean isOverWeightWarningShown = false;
 
     public State getCurrentState() {
         return currentState;
@@ -16,9 +18,10 @@ public class AppState {
 
     public void setState(State newState) {
         this.currentState = newState;
-        // Сбрасываем флаг записи при смене состояния
+        // Сбрасываем флаг записи и флаг предупреждения при смене состояния
         if (newState == State.EXPECT_DATA) {
             this.isDataRecordedForCycle = false;
+            this.isOverWeightWarningShown = false;
         }
     }
 
@@ -28,5 +31,13 @@ public class AppState {
 
     public void setDataRecordedForCycle(boolean recorded) {
         isDataRecordedForCycle = recorded;
+    }
+
+    public boolean isOverWeightWarningShown() {
+        return isOverWeightWarningShown;
+    }
+
+    public void setOverWeightWarningShown(boolean shown) {
+        isOverWeightWarningShown = shown;
     }
 }

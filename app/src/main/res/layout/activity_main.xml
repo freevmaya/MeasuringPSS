@@ -28,81 +28,12 @@
     <!-- RAW данные -->
 
     <!-- Кнопки управления -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="8dp">
-
-        <Button
-            android:id="@+id/btnSettings"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="⚙️"
-            android:textSize="24sp"
-            android:layout_marginEnd="4dp" />
-
-        <Button
-            android:id="@+id/btnScan"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="🔍"
-            android:textSize="24sp"
-            android:layout_marginEnd="4dp" />
-
-        <Button
-            android:id="@+id/btnClear"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="🗑️"
-            android:textSize="24sp"
-            android:layout_marginStart="4dp" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="4dp">
-
-        <Button
-            android:id="@+id/btnDataTable"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="📊"
-            android:textSize="24sp"
-            android:layout_marginStart="4dp" />
-
-        <Button
-            android:id="@+id/btnSaveDiff"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="💾"
-            android:textSize="24sp"
-            android:layout_marginStart="4dp" />
-
-        <Button
-            android:id="@+id/btnStatistics"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="📈"
-            android:textSize="24sp"
-            android:layout_marginEnd="4dp" />
-    </LinearLayout>
-
-    <!-- Предельные данные -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="📋 Предельные данные:"
-        android:textStyle="bold"
-        android:layout_marginTop="16dp" />
+        android:layout_marginTop="16dp"
+        android:text="Полученные измерения"
+        android:textStyle="bold" />
 
     <ScrollView
         android:id="@+id/limitDataScrollView"
@@ -118,5 +49,69 @@
             android:stretchColumns="*" />
 
     </ScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
+
+        <Button
+            android:id="@+id/btnSettings"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="⚙️"
+            android:textSize="24sp"/>
+
+        <Button
+            android:id="@+id/btnScan"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🔍"
+            android:textSize="24sp"/>
+
+        <Button
+            android:id="@+id/btnClear"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🗑️"
+            android:textSize="24sp"/>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="4dp">
+
+        <Button
+            android:id="@+id/btnDataTable"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="📊"
+            android:textSize="24sp"/>
+
+        <Button
+            android:id="@+id/btnSaveDiff"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="💾"
+            android:textSize="24sp"/>
+
+        <Button
+            android:id="@+id/btnStatistics"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="📈"
+            android:textSize="24sp"/>
+    </LinearLayout>
+
+    <!-- Предельные данные -->
 
 </LinearLayout>

@@ -1,6 +1,5 @@
 <resources>
     <string name="app_name">Measuring PSS</string>
-
     <string-array name="row_array">
         <item>A</item>
         <item>B</item>
@@ -8,15 +7,48 @@
         <item>D</item>
         <item>E</item>
     </string-array>
-
-    <!-- НОВЫЕ МАССИВЫ ДЛЯ НАСТРОЙКИ РЕЖИМА -->
     <string-array name="measurement_mode_entries">
         <item>Одна консоль</item>
         <item>Две консоли (левая и правая)</item>
     </string-array>
-
     <string-array name="measurement_mode_values">
         <item>single</item>
         <item>dual</item>
+    </string-array>
+    <string-array name="correction_mode_entries">
+        <item>Общая коррекция</item>
+        <item>По рядам</item>
+        <item>По A ряду</item>
+        <item>По B ряду</item>
+        <item>По C ряду</item>
+        <item>По D ряду</item>
+        <item>По E ряду</item>
+    </string-array>
+    <string-array name="correction_mode_values">
+        <item>global</item>
+        <item>per_row</item>
+        <item>row_0</item>
+        <item>row_1</item>
+        <item>row_2</item>
+        <item>row_3</item>
+        <item>row_4</item>
+    </string-array>
+
+    <!-- Методика замера -->
+    <string-array name="measurement_method_entries">
+        <item>1 замер</item>
+        <item>2 замера, среднее</item>
+        <item>3 замера, среднее</item>
+        <item>2 замера, 0.1 / 0.9</item>
+        <item>3 замера, квадрат</item>
+        <item>5 замеров, квадрат</item>
+    </string-array>
+    <string-array name="measurement_method_values">
+        <item>method_1</item>
+        <item>method_2</item>
+        <item>method_3</item>
+        <item>method_4</item>
+        <item>method_5</item>
+        <item>method_6</item>
     </string-array>
 </resources>

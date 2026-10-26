@@ -29,6 +29,7 @@ import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.MediaStore;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ScrollView;
@@ -37,6 +38,7 @@ import android.widget.TableRow;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.documentfile.provider.DocumentFile;
+import android.bluetooth.BluetoothStatusCodes;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
@@ -51,18 +53,25 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity {
 
+    private static final String TAG = "MainActivity";
+
     // UUID из вашего кода ESP32
     private static final UUID SERVICE_UUID = UUID.fromString("4e292be3-71e6-4ca1-a06e-b1b3660df15c");
     private static final UUID NOTIFY_UUID = UUID.fromString("087dde8f-83e6-4f77-b9b0-7e966a7706a8");
+    // ДОБАВЛЕНО: стандартный UUID CCCD
+    private static final UUID CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
 
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothLeScanner bleScanner;
@@ -183,7 +192,6 @@ public class MainActivity extends AppCompatActivity {
         updateUI(false);
 
         // Устанавливаем начальный статус
-        //tvStatus.setText("⏳ Ожидание превышения веса...");
         updateStatusForCurrentTarget();
 
         View btnDataTable = findViewById(R.id.btnDataTable);
@@ -220,9 +228,8 @@ public class MainActivity extends AppCompatActivity {
             tvStatus.setText("✅ Подключено к " + currentDevice.getName());
         }
 
-        // НОВОЕ: если нет соединения — автоматически запускаем сканирование
+        // Если нет соединения — автоматически запускаем сканирование
         if (!isConnected) {
-            // Небольшая задержка, чтобы UI успел обновиться
             handler.postDelayed(() -> {
                 if (!isConnected && !isScanning) {
                     tvStatus.setText("🔍 Автоматический поиск устройства...");
@@ -295,38 +302,57 @@ public class MainActivity extends AppCompatActivity {
     /**
      * Сохраняет diff значения из DataSample в CSV файл.
      * Формат: Индекс,Ном. нижн.,Превышение,Расчет,Разница
+     *
+     * ИЗМЕНЕНО:
+     * - теперь сохраняет и без загруженного CSV;
+     * - без CSV имя файла: measuring_<метод>_YYYYMMDD_HHmm.csv, сохранение в Downloads;
+     * - без CSV колонка "Расчет" содержит только distance, "Разница" — прочерк.
      */
     private void saveDiffData() {
         DataManager dataManager = DataManager.getInstance();
 
-        if (!dataManager.isCsvLoaded() || limitDataList.isEmpty()) {
-            Toast.makeText(this, "Нет данных для сохранения. Загрузите CSV и дождитесь записей.", Toast.LENGTH_LONG).show();
+        if (limitDataList.isEmpty()) {
+            Toast.makeText(this, "Нет данных для сохранения. Дождитесь записей.", Toast.LENGTH_LONG).show();
             return;
         }
 
-        Uri originalUri = dataManager.getCurrentFileUri();
-        if (originalUri == null) {
-            Toast.makeText(this, "Не удалось определить путь к оригинальному файлу.", Toast.LENGTH_LONG).show();
-            return;
-        }
+        boolean hasCsvData = dataManager.isCsvLoaded();
 
-        String originalFileName = dataManager.getCurrentFileName();
+        // Формируем имя файла
         String newFileName;
-        if (originalFileName.contains(".")) {
-            int dotIndex = originalFileName.lastIndexOf('.');
-            newFileName = originalFileName.substring(0, dotIndex) + "_diff" + originalFileName.substring(dotIndex);
+        if (hasCsvData) {
+            String originalFileName = dataManager.getCurrentFileName();
+            if (originalFileName != null && originalFileName.contains(".")) {
+                int dotIndex = originalFileName.lastIndexOf('.');
+                newFileName = originalFileName.substring(0, dotIndex) + "_diff" + originalFileName.substring(dotIndex);
+            } else {
+                newFileName = originalFileName + "_diff.csv";
+            }
         } else {
-            newFileName = originalFileName + "_diff.csv";
+            // Без CSV: measuring_<номер метода>_YYYYMMDD_HHmm.csv
+            String timestamp = new SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(new Date());
+            newFileName = "measuring_" + getMeasurementMethodNumber() + "_" + timestamp + ".csv";
         }
 
+        // Формируем содержимое CSV
         StringBuilder csvContent = new StringBuilder();
         csvContent.append("Индекс,Ном. нижн.,Превышение,Расчет,Разница\n");
         for (DataSample sample : limitDataList) {
             String fullIndex = sample.getFullIndex();
             String lowerTierNumber = sample.getLowerTierNumber() != 0 ? String.valueOf(sample.getLowerTierNumber()) : "";
             String weightOverLimit = String.valueOf(sample.getWeight());
-            String calculation = String.format("%d - %d", sample.getDistance(), sample.getTargetWeight());
-            String diff = String.format("%.0f", sample.getDiff());
+
+            String calculation;
+            String diff;
+            if (hasCsvData && sample.getTargetWeight() != 0) {
+                calculation = String.format("%d - %d", sample.getDistance(), sample.getTargetWeight());
+                diff = String.format("%.0f", sample.getDiff());
+            } else {
+                // Без CSV (или targetWeight == 0): показываем только измеренное расстояние, разницы нет
+                calculation = String.valueOf(sample.getDistance());
+                diff = "—";
+            }
+
             csvContent.append(fullIndex).append(",")
                     .append(lowerTierNumber).append(",")
                     .append(weightOverLimit).append(",")
@@ -334,8 +360,17 @@ public class MainActivity extends AppCompatActivity {
                     .append(diff).append("\n");
         }
 
-        // Вызываем обновленный метод saveFile с URI исходного файла
-        boolean success = saveFile(originalUri, newFileName, csvContent.toString());
+        boolean success;
+        if (hasCsvData) {
+            Uri originalUri = dataManager.getCurrentFileUri();
+            if (originalUri == null) {
+                Toast.makeText(this, "Не удалось определить путь к оригинальному файлу.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            success = saveFile(originalUri, newFileName, csvContent.toString());
+        } else {
+            success = saveFileLegacy(newFileName, csvContent.toString());
+        }
 
         if (success) {
             Toast.makeText(this, "Файл сохранен: " + newFileName, Toast.LENGTH_LONG).show();
@@ -345,15 +380,31 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
+     * Возвращает номер текущей методики замера (1..6).
+     * Соответствует method_1..method_6.
+     */
+    private int getMeasurementMethodNumber() {
+        String method = appSettings.getMeasurementMethod();
+        if (AppSettings.MEASUREMENT_METHOD_1.equals(method)) {
+            return 1;
+        } else if (AppSettings.MEASUREMENT_METHOD_2.equals(method)) {
+            return 2;
+        } else if (AppSettings.MEASUREMENT_METHOD_3.equals(method)) {
+            return 3;
+        } else if (AppSettings.MEASUREMENT_METHOD_4.equals(method)) {
+            return 4;
+        } else if (AppSettings.MEASUREMENT_METHOD_5.equals(method)) {
+            return 5;
+        } else if (AppSettings.MEASUREMENT_METHOD_6.equals(method)) {
+            return 6;
+        }
+        return 1;
+    }
+
+    /**
      * Сохраняет файл в ту же папку, что и исходный файл, используя DocumentFile.
-     *
-     * @param originalFileUri URI исходного файла, чтобы определить папку.
-     * @param fileName        Имя нового файла.
-     * @param content         Содержимое файла.
-     * @return true, если сохранение прошло успешно, иначе false.
      */
     private boolean saveFile(Uri originalFileUri, String fileName, String content) {
-        // Преобразуем URI исходного файла в DocumentFile
         DocumentFile originalDocumentFile = DocumentFile.fromSingleUri(this, originalFileUri);
         DocumentFile parentFolder = originalDocumentFile.getParentFile();
         String fileNameFull = fileName;
@@ -368,23 +419,19 @@ public class MainActivity extends AppCompatActivity {
             return saveFileLegacy(fileNameFull, content);
         }
 
-        // Запрашиваем разрешение на запись в эту папку
         try {
             getContentResolver().takePersistableUriPermission(parentFolder.getUri(),
                     Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
         } catch (SecurityException e) {
             e.printStackTrace();
-            // Если не удалось получить разрешение, пробуем старый способ (может не работать на новых версиях)
             return saveFileLegacy(fileName, content);
         }
 
-        // Создаем новый файл в этой папке
         DocumentFile newFile = parentFolder.createFile("text/csv", fileName);
         if (newFile == null) {
             return false;
         }
 
-        // Записываем данные в новый файл
         try (OutputStream os = getContentResolver().openOutputStream(newFile.getUri())) {
             if (os == null) {
                 return false;
@@ -459,14 +506,9 @@ public class MainActivity extends AppCompatActivity {
                 recalculateAllDataSamples();
             }
             // Показываем актуальную коррекцию в зависимости от режима
-            if (appSettings.isCorrectionPerRow()) {
-                String corrStr = dynamicDistanceAddMap.isEmpty() ? "0" : dynamicDistanceAddMap.toString();
-                tvStatus.setText(String.format("⚙️ Коэф: %.2f, Корр: ДИН (%s), Предел: %.1f, Порог: %d мм",
-                        weightCf, corrStr, weightLimit, diffThreshold));
-            } else {
-                tvStatus.setText(String.format("⚙️ Коэф: %.2f, Корр: ДИН (%d), Предел: %.1f, Порог: %d мм",
-                        weightCf, globalDynamicDistanceAdd, weightLimit, diffThreshold));
-            }
+            String corrStr = getCorrectionInfoString();
+            tvStatus.setText(String.format("⚙️ Коэф: %.2f, Корр: %s, Предел: %.1f, Порог: %d мм",
+                    weightCf, corrStr, weightLimit, diffThreshold));
         } else {
             tvStatus.setText(String.format("⚙️ Коэф: %.2f, Корр: %d, Предел: %.1f, Порог: %d мм",
                     weightCf, distanceAdd, weightLimit, diffThreshold));
@@ -476,7 +518,66 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Вычисляет глобальную динамическую коррекцию (старый метод)
+     * Возвращает строку с описанием текущей коррекции для отображения в статусе.
+     */
+    private String getCorrectionInfoString() {
+        int distanceAdd = appSettings.getDistanceAdd();
+        if (distanceAdd != 0) {
+            return String.valueOf(distanceAdd);
+        }
+        String mode = appSettings.getCorrectionMode();
+        if (AppSettings.CORRECTION_MODE_GLOBAL.equals(mode)) {
+            return "ДИН (" + globalDynamicDistanceAdd + ")";
+        } else if (AppSettings.CORRECTION_MODE_PER_ROW.equals(mode)) {
+            return "ДИН-РЯД (" + dynamicDistanceAddMap.toString() + ")";
+        } else {
+            // row_N
+            int rowIdx = appSettings.getCorrectionModeRowIndex();
+            if (rowIdx >= 0) {
+                String letter = getColumnLetter(rowIdx);
+                if (dynamicDistanceAddMap.containsKey(rowIdx)) {
+                    return "ДИН-" + letter + " (" + dynamicDistanceAddMap.get(rowIdx) + ")";
+                } else {
+                    // fallback на глобальную
+                    return "ДИН-" + letter + "→ГЛОБ (" + globalDynamicDistanceAdd + ")";
+                }
+            }
+            return "ДИН (" + globalDynamicDistanceAdd + ")";
+        }
+    }
+
+    /**
+     * Возвращает эффективную коррекцию для указанной колонки (ряда)
+     * в соответствии с текущим режимом коррекции.
+     */
+    private int getEffectiveCorrection(int col) {
+        int distanceAdd = appSettings.getDistanceAdd();
+        if (distanceAdd != 0) {
+            return distanceAdd;
+        }
+
+        String mode = appSettings.getCorrectionMode();
+
+        if (AppSettings.CORRECTION_MODE_GLOBAL.equals(mode)) {
+            return globalDynamicDistanceAdd;
+        } else if (AppSettings.CORRECTION_MODE_PER_ROW.equals(mode)) {
+            return dynamicDistanceAddMap.getOrDefault(col, 0);
+        } else if (mode != null && mode.startsWith(AppSettings.CORRECTION_MODE_ROW_PREFIX)) {
+            int rowIdx = appSettings.getCorrectionModeRowIndex();
+            if (rowIdx >= 0 && dynamicDistanceAddMap.containsKey(rowIdx)) {
+                return dynamicDistanceAddMap.get(rowIdx);
+            } else {
+                // fallback на глобальную, если данных по ряду ещё нет
+                return globalDynamicDistanceAdd;
+            }
+        }
+
+        // fallback на всякий случай
+        return globalDynamicDistanceAdd;
+    }
+
+    /**
+     * Вычисляет глобальную динамическую коррекцию
      */
     private int calculateGlobalDynamicDistanceAdd() {
         if (limitDataList.isEmpty()) {
@@ -514,24 +615,10 @@ public class MainActivity extends AppCompatActivity {
      * Пересчитывает все записи в limitDataList с текущей коррекцией
      */
     private void recalculateAllDataSamples() {
-        int distanceAdd = appSettings.getDistanceAdd();
-        boolean useDynamicCorrection = (distanceAdd == 0);
-
         for (DataSample sample : limitDataList) {
             int rawDist = sample.getRawDistance();
-            int correctedDistance;
-            if (useDynamicCorrection) {
-                if (appSettings.isCorrectionPerRow()) {
-                    // НОВАЯ ЛОГИКА: коррекция для каждого ряда
-                    int colCorrection = dynamicDistanceAddMap.getOrDefault(sample.getCol(), 0);
-                    correctedDistance = rawDist + colCorrection;
-                } else {
-                    // СТАРАЯ ЛОГИКА: одна общая коррекция
-                    correctedDistance = rawDist + globalDynamicDistanceAdd;
-                }
-            } else {
-                correctedDistance = rawDist + distanceAdd;
-            }
+            int colCorrection = getEffectiveCorrection(sample.getCol());
+            int correctedDistance = rawDist + colCorrection;
             sample.setDistance(correctedDistance);
 
             int targetWeight = sample.getTargetWeight();
@@ -544,7 +631,6 @@ public class MainActivity extends AppCompatActivity {
 
     /**
      * Вычисляет динамическую коррекцию расстояния для каждого ряда (колонки) отдельно
-     * Использует метод MAD (среднее абсолютное отклонение от медианы) для каждой колонки
      */
     private Map<Integer, Integer> calculateDynamicDistanceAddMap() {
         Map<Integer, List<Double>> diffsByCol = new HashMap<>();
@@ -553,7 +639,6 @@ public class MainActivity extends AppCompatActivity {
             return new HashMap<>();
         }
 
-        // Группируем разницы (target - raw) по колонкам
         for (DataSample sample : limitDataList) {
             int col = sample.getCol();
             double diff = sample.getTargetWeight() - sample.getRawDistance();
@@ -644,7 +729,6 @@ public class MainActivity extends AppCompatActivity {
             return null;
         }
 
-        // Получаем текущую цель
         MeasurementTarget target = getCurrentTarget();
         if (target == null) {
             return null;
@@ -659,8 +743,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Обновляет таблицу предельных данных
-     * Колонки: Ном, Расч, Разн
+     * Обновляет таблицу предельных данных.
+     *
+     * Если CSV не загружен, в колонке "Расч" показывается измеренное
+     * расстояние (sample.getDistance()), а в колонке "Разн" — прочерк "—".
      */
     private void updateLimitDataTable() {
         tableLimitData.removeAllViews();
@@ -681,15 +767,17 @@ public class MainActivity extends AppCompatActivity {
             String fullIndex = sample.getFullIndex();
 
             String calculation;
+            String diffValue;
             if (hasCsvData) {
                 int measuredDistance = sample.getDistance();
                 int requiredDistance = sample.getTargetWeight();
                 calculation = String.format("%d - %d", measuredDistance, requiredDistance);
+                diffValue = String.format("%.0f", sample.getDiff());
             } else {
-                calculation = "";
+                // Без CSV: показываем измеренное расстояние, разницу показать не с чем
+                calculation = String.valueOf(sample.getDistance());
+                diffValue = "—";
             }
-
-            String diffValue = hasCsvData ? String.format("%.0f", sample.getDiff()) : "";
 
             String[] rowData = new String[]{
                     fullIndex,
@@ -725,7 +813,7 @@ public class MainActivity extends AppCompatActivity {
                     highlightDiff = true;
                 }
             } catch (NumberFormatException e) {
-                // Игнорируем
+                // Игнорируем (например, прочерк "—")
             }
         }
 
@@ -777,35 +865,23 @@ public class MainActivity extends AppCompatActivity {
         int weightOverLimit = (int) Math.round(correctedWeight - weightLimit);
         int targetWeightInt = (int) Math.round(targetWeight);
 
-        soundManager.playClickSound();
+        soundManager.playRecordSound();
 
-        // Создаем запись с номером стропы, номером нижнего яруса и стороной
         DataSample sample = new DataSample(col, currentRowIndex,
                 weightOverLimit, targetWeightInt, rawDistance, distance, diff, lowerTierNumber, side);
         limitDataList.add(sample);
 
         int settingsDistanceAdd = appSettings.getDistanceAdd();
         if (settingsDistanceAdd == 0) {
-            // Выбираем способ вычисления коррекции в зависимости от настройки
-            if (appSettings.isCorrectionPerRow()) {
-                // НОВАЯ ЛОГИКА: коррекция для каждого ряда отдельно
-                dynamicDistanceAddMap = calculateDynamicDistanceAddMap();
-            } else {
-                // СТАРАЯ ЛОГИКА: одна общая коррекция
-                globalDynamicDistanceAdd = calculateGlobalDynamicDistanceAdd();
-                dynamicDistanceAddMap.clear(); // очищаем карту, чтобы не было путаницы
-            }
+            // Авто-режим: всегда пересчитываем ОБЕ величины,
+            // чтобы переключение режима в настройках работало без пересчёта
+            globalDynamicDistanceAdd = calculateGlobalDynamicDistanceAdd();
+            dynamicDistanceAddMap = calculateDynamicDistanceAddMap();
             recalculateAllDataSamples();
 
             double weightCf = appSettings.getWeightCf();
-            if (appSettings.isCorrectionPerRow()) {
-                String corrStr = dynamicDistanceAddMap.isEmpty() ? "0" : dynamicDistanceAddMap.toString();
-                tvStatus.setText(String.format("⚙️ Коэф: %.2f, Корр: ДИН (%s), Предел: %.1f",
-                        weightCf, corrStr, weightLimit));
-            } else {
-                tvStatus.setText(String.format("⚙️ Коэф: %.2f, Корр: ДИН (%d), Предел: %.1f",
-                        weightCf, globalDynamicDistanceAdd, weightLimit));
-            }
+            tvStatus.setText(String.format("⚙️ Коэф: %.2f, Корр: %s, Предел: %.1f",
+                    weightCf, getCorrectionInfoString(), weightLimit));
         } else {
             updateLimitDataTable();
         }
@@ -826,40 +902,29 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Получаем последнюю запись перед удалением
         DataSample lastSample = limitDataList.get(limitDataList.size() - 1);
         int removedCol = lastSample.getCol();
         int removedRow = lastSample.getRowIndex();
         String removedSide = lastSample.getSide();
 
-        // Удаляем последнюю запись
         limitDataList.remove(limitDataList.size() - 1);
 
-        // Очищаем буферы
         weightOverLimitBuffer.clear();
         distanceBuffer.clear();
 
-        // Пересчитываем динамическую коррекцию
         int settingsDistanceAdd = appSettings.getDistanceAdd();
         if (settingsDistanceAdd == 0) {
             if (limitDataList.isEmpty()) {
                 dynamicDistanceAddMap.clear();
                 globalDynamicDistanceAdd = 0;
             } else {
-                if (appSettings.isCorrectionPerRow()) {
-                    dynamicDistanceAddMap = calculateDynamicDistanceAddMap();
-                } else {
-                    globalDynamicDistanceAdd = calculateGlobalDynamicDistanceAdd();
-                    dynamicDistanceAddMap.clear();
-                }
+                // Пересчитываем обе величины
+                globalDynamicDistanceAdd = calculateGlobalDynamicDistanceAdd();
+                dynamicDistanceAddMap = calculateDynamicDistanceAddMap();
                 recalculateAllDataSamples();
             }
         }
 
-        // ... остальной код без изменений (обновление очереди и таблицы) ...
-
-        // ВАЖНО: Не сбрасываем очередь полностью, а обновляем ее состояние
-        // Находим индекс удаленной записи в очереди
         int targetQueueIndex = -1;
         for (int i = 0; i < measurementQueue.size(); i++) {
             MeasurementTarget target = measurementQueue.get(i);
@@ -888,9 +953,6 @@ public class MainActivity extends AppCompatActivity {
 
     // ==================== МЕТОДЫ ДЛЯ РАБОТЫ С ОЧЕРЕДЬЮ ИЗМЕРЕНИЙ ====================
 
-    /**
-     * Построить очередь измерений в зависимости от режима
-     */
     private void buildMeasurementQueue() {
         measurementQueue.clear();
         currentQueueIndex = 0;
@@ -907,15 +969,12 @@ public class MainActivity extends AppCompatActivity {
             int rowCount = dataManager.getRowCount(col);
 
             if (isDualMode) {
-                // --- РЕЖИМ "ДВЕ КОНСОЛИ" (как в документации) ---
-                // 1. Все левые стропы (от последней к первой)
                 for (int row = rowCount - 1; row >= 0; row--) {
                     String value = dataManager.getCellValue(row, col);
                     if (value != null && !value.trim().isEmpty()) {
                         measurementQueue.add(new MeasurementTarget(col, row, "l"));
                     }
                 }
-                // 2. Все правые стропы (от первой к последней)
                 for (int row = 0; row < rowCount; row++) {
                     String value = dataManager.getCellValue(row, col);
                     if (value != null && !value.trim().isEmpty()) {
@@ -923,24 +982,18 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
             } else {
-                // --- РЕЖИМ "ОДНА КОНСОЛЬ" (как в документации) ---
                 for (int row = 0; row < rowCount; row++) {
                     String value = dataManager.getCellValue(row, col);
                     if (value != null && !value.trim().isEmpty()) {
-                        measurementQueue.add(new MeasurementTarget(col, row, "")); // side пустой
+                        measurementQueue.add(new MeasurementTarget(col, row, ""));
                     }
                 }
             }
         }
 
-        // СИНХРОНИЗИРУЕМ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ С ПЕРВОЙ ЦЕЛЬЮ
         syncCurrentIndexesWithQueue();
     }
 
-    /**
-     * Синхронизирует currentRowIndex и currentColumnIndex с первой целью в очереди.
-     * Это гарантирует, что первое измерение будет иметь правильный индекс.
-     */
     private void syncCurrentIndexesWithQueue() {
         MeasurementTarget firstTarget = getCurrentTarget();
         if (firstTarget != null) {
@@ -949,9 +1002,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * Получить текущую цель измерения
-     */
     private MeasurementTarget getCurrentTarget() {
         if (measurementQueue.isEmpty() || currentQueueIndex >= measurementQueue.size()) {
             return null;
@@ -959,9 +1009,6 @@ public class MainActivity extends AppCompatActivity {
         return measurementQueue.get(currentQueueIndex);
     }
 
-    /**
-     * Перейти к следующей цели измерения
-     */
     private void advanceToNextTarget() {
         currentQueueIndex++;
         MeasurementTarget next = getCurrentTarget();
@@ -969,16 +1016,13 @@ public class MainActivity extends AppCompatActivity {
             currentColumnIndex = next.col;
             currentRowIndex = next.row;
             updateStatusForCurrentTarget();
-            isTableDataExhausted = false; // Сбрасываем флаг, если есть следующая цель
+            isTableDataExhausted = false;
         } else {
             isTableDataExhausted = true;
             tvStatus.setText("✅ Все данные из таблицы обработаны!");
         }
     }
 
-    /**
-     * Обновить статус для текущей цели
-     */
     private void updateStatusForCurrentTarget() {
         MeasurementTarget target = getCurrentTarget();
         if (target == null) {
@@ -986,7 +1030,6 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Обновляем глобальные индексы, если они не совпадают с целевыми
         if (currentColumnIndex != target.col || currentRowIndex != target.row) {
             currentColumnIndex = target.col;
             currentRowIndex = target.row;
@@ -999,29 +1042,23 @@ public class MainActivity extends AppCompatActivity {
             sideDisplay = target.side.equals("l") ? " (левая)" : " (правая)";
         }
 
-        // Используем правильное формирование индекса: a4l, b2r и т.д.
         String index = colLetter.toLowerCase() + rowNum + target.side;
         String statusMsg = String.format("⏳ %s%s - ожидание превышения ", index, sideDisplay);
         tvStatus.setText(statusMsg);
     }
 
-    /**
-     * Переход к следующей ячейке таблицы
-     * @return true если данные закончились
-     */
     private boolean advanceToNextTableCell() {
         if (measurementQueue.isEmpty()) {
             isTableDataExhausted = true;
             return true;
         }
 
-        advanceToNextTarget(); // Переходим к следующему элементу в очереди
+        advanceToNextTarget();
 
         if (isTableDataExhausted) {
             return true;
         }
 
-        // Проверяем, что следующая цель существует и не пуста
         MeasurementTarget target = getCurrentTarget();
         while (target != null) {
             String value = DataManager.getInstance().getCellValue(target.row, target.col);
@@ -1029,9 +1066,8 @@ public class MainActivity extends AppCompatActivity {
                 currentColumnIndex = target.col;
                 currentRowIndex = target.row;
                 updateStatusForCurrentTarget();
-                return false; // Успешно перешли на следующую ячейку
+                return false;
             }
-            // Если ячейка пуста, пропускаем её
             advanceToNextTarget();
             target = getCurrentTarget();
         }
@@ -1148,7 +1184,6 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Если уже сканируем — не запускаем повторно
         if (isScanning) {
             return;
         }
@@ -1167,11 +1202,9 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Таймаут сканирования
         handler.postDelayed(() -> {
             if (isScanning) {
                 stopScan();
-                // Если это было автоматическое сканирование и устройство не найдено
                 if (!isConnected) {
                     tvStatus.setText("⏹️ Устройство не найдено. Нажмите 🔍 для повторного поиска.");
                 } else {
@@ -1191,7 +1224,6 @@ public class MainActivity extends AppCompatActivity {
                 e.printStackTrace();
             }
             isScanning = false;
-            // Возвращаем кнопку в исходное состояние, если она не в режиме "подключено"
             if (!isConnected) {
                 btnScan.setText("🔍");
             }
@@ -1228,14 +1260,12 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
 
-            // Автоматически подключаемся к устройству "Measuring PSS"
             if (deviceName != null && deviceName.equals("Measuring PSS")) {
                 runOnUiThread(() -> {
                     tvStatus.setText("✅ Найдено устройство: " + deviceName + "\nMAC: " + device.getAddress());
                     Toast.makeText(MainActivity.this, "Найдено: " + deviceName + ", подключение...", Toast.LENGTH_SHORT).show();
                 });
 
-                // Останавливаем сканирование и подключаемся
                 stopScan();
                 autoConnectToDevice(device);
             }
@@ -1287,23 +1317,6 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    private void connectToDevice() {
-        if (currentDevice == null) {
-            Toast.makeText(this, "Сначала отсканируйте устройство", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                tvStatus.setText("❌ Нет разрешения BLUETOOTH_CONNECT");
-                return;
-            }
-        }
-
-        tvStatus.setText("🔗 Подключение к " + currentDevice.getName() + "...");
-        bluetoothGatt = currentDevice.connectGatt(this, false, gattCallback);
-    }
-
     private void disconnectDevice() {
         if (bluetoothGatt != null) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -1336,6 +1349,8 @@ public class MainActivity extends AppCompatActivity {
         currentQueueIndex = 0;
     }
 
+    // ==================== GATT CALLBACK ====================
+
     private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
         @SuppressLint("MissingPermission")
         @Override
@@ -1343,20 +1358,26 @@ public class MainActivity extends AppCompatActivity {
             if (newState == BluetoothGatt.STATE_CONNECTED) {
                 isConnected = true;
                 jsonBuffer.setLength(0);
+                Log.d(TAG, "onConnectionStateChange: CONNECTED, status=" + status);
                 runOnUiThread(() -> {
                     tvStatus.setText("✅ Подключено к " + currentDevice.getName());
                     updateUI(true);
                     appState.setState(AppState.State.EXPECT_DATA);
-                    //tvStatus.setText("⏳ Ожидание превышения веса...");
                     updateStatusForCurrentTarget();
                     resetTableState();
-                    // НОВОЕ: строим очередь измерений при подключении
                     buildMeasurementQueue();
-                    // Если очередь не пуста, обновляем статус
                     if (!measurementQueue.isEmpty()) {
                         updateStatusForCurrentTarget();
                     } else {
-                        tvStatus.setText("⚠️ Нет данных для измерений. Загрузите CSV.");
+                        DataManager dataManager = DataManager.getInstance();
+                        if (dataManager.isCsvLoaded()) {
+                            tvStatus.setText("⚠️ Нет данных для измерений. Загрузите CSV.");
+                        } else {
+                            // Без CSV работаем по методике замера, начиная со стропы a1
+                            currentColumnIndex = 0;
+                            currentRowIndex = 0;
+                            updateStatusWithoutCsv();
+                        }
                     }
                 });
 
@@ -1369,6 +1390,7 @@ public class MainActivity extends AppCompatActivity {
             } else if (newState == BluetoothGatt.STATE_DISCONNECTED) {
                 isConnected = false;
                 jsonBuffer.setLength(0);
+                Log.d(TAG, "onConnectionStateChange: DISCONNECTED, status=" + status);
                 runOnUiThread(() -> {
                     tvStatus.setText("❌ Отключено");
                     updateUI(false);
@@ -1379,45 +1401,113 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onServicesDiscovered(BluetoothGatt gatt, int status) {
+            Log.d(TAG, "onServicesDiscovered: status=" + status);
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 BluetoothGattService service = gatt.getService(SERVICE_UUID);
-                if (service != null) {
-                    BluetoothGattCharacteristic characteristic = service.getCharacteristic(NOTIFY_UUID);
-                    if (characteristic != null) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                                return;
-                            }
-                        }
+                if (service == null) {
+                    Log.e(TAG, "SERVICE_UUID не найден!");
+                    runOnUiThread(() -> tvStatus.setText("❌ Сервис не найден"));
+                    return;
+                }
 
-                        gatt.setCharacteristicNotification(characteristic, true);
+                BluetoothGattCharacteristic characteristic = service.getCharacteristic(NOTIFY_UUID);
+                if (characteristic == null) {
+                    Log.e(TAG, "NOTIFY_UUID не найден!");
+                    runOnUiThread(() -> tvStatus.setText("❌ Характеристика уведомлений не найдена"));
+                    return;
+                }
 
-                        BluetoothGattDescriptor descriptor = characteristic.getDescriptor(
-                                UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-                        );
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                        return;
+                    }
+                }
 
-                        if (descriptor != null) {
+                // 1) Локально включаем уведомления
+                boolean okLocal = gatt.setCharacteristicNotification(characteristic, true);
+                Log.d(TAG, "setCharacteristicNotification = " + okLocal);
+
+                // 2) Включаем уведомления на стороне ESP32 через CCCD
+                BluetoothGattDescriptor descriptor = characteristic.getDescriptor(CCCD_UUID);
+                if (descriptor == null) {
+                    Log.e(TAG, "CCCD дескриптор не найден!");
+                    runOnUiThread(() -> tvStatus.setText("❌ CCCD не найден"));
+                    return;
+                }
+
+                boolean okWrite;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    // ИСПРАВЛЕНО: writeDescriptor(descriptor, value) возвращает int, а не boolean
+                    int result = gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+                    okWrite = (result == BluetoothStatusCodes.SUCCESS);
+                } else {
+                    descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+                    okWrite = gatt.writeDescriptor(descriptor);
+                }
+                Log.d(TAG, "writeDescriptor = " + okWrite);
+
+                if (okWrite) {
+                    runOnUiThread(() -> tvStatus.setText("✅ Подписка на уведомления активирована"));
+                } else {
+                    // ИСПРАВЛЕНО: повторная попытка через задержку, если очередь GATT занята
+                    Log.w(TAG, "writeDescriptor вернул false, повтор через 300 мс");
+                    handler.postDelayed(() -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+                        } else {
                             descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
                             gatt.writeDescriptor(descriptor);
                         }
-
-                        runOnUiThread(() -> tvStatus.setText("✅ Подписка на уведомления активирована"));
-                    }
+                    }, 300);
                 }
+            } else {
+                Log.e(TAG, "onServicesDiscovered failed, status=" + status);
             }
         }
 
         @Override
-        public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
-            if (characteristic.getUuid().equals(NOTIFY_UUID)) {
-                byte[] data = characteristic.getValue();
-                String receivedData = new String(data);
-
+        public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
+            // ДОБАВЛЕНО: логируем результат записи CCCD
+            Log.d(TAG, "onDescriptorWrite: uuid=" + descriptor.getUuid() + ", status=" + status);
+            if (descriptor.getUuid().equals(CCCD_UUID)) {
                 runOnUiThread(() -> {
-                    jsonBuffer.append(receivedData);
-                    processJsonBuffer();
+                    if (status == BluetoothGatt.GATT_SUCCESS) {
+                        tvStatus.setText("✅ Подписка на уведомления активирована");
+                    } else {
+                        tvStatus.setText("❌ Ошибка подписки CCCD: " + status);
+                    }
                 });
             }
+        }
+
+        // ИСПРАВЛЕНО: новый API для Android 13+
+        @Override
+        public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, byte[] value) {
+            if (characteristic.getUuid().equals(NOTIFY_UUID)) {
+                handleIncomingData(value);
+            }
+        }
+
+        // Старый API для Android < 13
+        @Override
+        public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                return; // уже обработано новым API
+            }
+            if (characteristic.getUuid().equals(NOTIFY_UUID)) {
+                handleIncomingData(characteristic.getValue());
+            }
+        }
+
+        private void handleIncomingData(byte[] data) {
+            if (data == null) return;
+            String receivedData = new String(data);
+            Log.d(TAG, "onCharacteristicChanged: " + receivedData);
+
+            runOnUiThread(() -> {
+                jsonBuffer.append(receivedData);
+                processJsonBuffer();
+            });
         }
 
         private void processJsonBuffer() {
@@ -1464,27 +1554,17 @@ public class MainActivity extends AppCompatActivity {
                 DataModel dataModel = gson.fromJson(validJson, DataModel.class);
 
                 double weightCf = appSettings.getWeightCf();
-                int distanceAdd = appSettings.getDistanceAdd();
                 double weightLimit = appSettings.getWeightLimit();
 
                 double correctedWeight = dataModel.getWeight() * weightCf;
                 int rawDistance = dataModel.getDistance();
 
-                int correctedDistance;
-                if (distanceAdd == 0) {
-                    if (appSettings.isCorrectionPerRow()) {
-                        // НОВАЯ ЛОГИКА: используем коррекцию для текущей колонки
-                        int colCorrection = dynamicDistanceAddMap.getOrDefault(currentColumnIndex, 0);
-                        correctedDistance = rawDistance + colCorrection;
-                    } else {
-                        // СТАРАЯ ЛОГИКА: используем глобальную коррекцию
-                        correctedDistance = rawDistance + globalDynamicDistanceAdd;
-                    }
-                } else {
-                    correctedDistance = rawDistance + distanceAdd;
-                }
+                // Используем эффективную коррекцию в зависимости от режима и текущего ряда
+                int effectiveCorrection = getEffectiveCorrection(currentColumnIndex);
+                int correctedDistance = rawDistance + effectiveCorrection;
 
-                tvWeightDistance.setText(String.format("⚖️: %.2f г, 📏: %d мм", correctedWeight, rawDistance));
+                // ИЗМЕНЕНО: вывод веса в кг с одним знаком после запятой
+                tvWeightDistance.setText(String.format("⚖️: %.1f кг, 📏: %d мм", correctedWeight / 1000.0, correctedDistance));
 
                 if (appState.getCurrentState() == AppState.State.EXPECT_DATA) {
                     if (correctedWeight > weightLimit && !appState.isDataRecordedForCycle()) {
@@ -1492,25 +1572,32 @@ public class MainActivity extends AppCompatActivity {
                         double overWeight = correctedWeight - weightLimit;
 
                         if (overWeight < 1000) {
+                            appState.setOverWeightWarningShown(false);
                             if (dataManager.isCsvLoaded()) {
                                 processWithCsvData(correctedWeight, correctedDistance, rawDistance, dataModel, weightLimit);
                             } else {
-                                addLimitDataRecord(correctedWeight, 0.0, rawDistance, correctedDistance, 0.0, weightLimit, 0, "", currentColumnIndex);
-                                dataModel.setRecorded(true);
-                                appState.setDataRecordedForCycle(true);
-                                appState.setState(AppState.State.EXPECT_RETURN);
-                                tvStatus.setText("⏳ Ожидание снижения веса...");
+                                // Без CSV тоже работаем по методике замера
+                                processWithoutCsvData(correctedWeight, correctedDistance, rawDistance, dataModel, weightLimit);
                             }
                         } else {
-                            Toast.makeText(MainActivity.this, "Слишком большое превышение веса!", Toast.LENGTH_SHORT).show();
+                            if (!appState.isOverWeightWarningShown()) {
+                                Toast.makeText(MainActivity.this, "Слишком большое превышение веса!", Toast.LENGTH_SHORT).show();
+                                appState.setOverWeightWarningShown(true);
+                            }
                         }
+                    } else if (correctedWeight <= weightLimit) {
+                        appState.setOverWeightWarningShown(false);
                     }
                 } else if (appState.getCurrentState() == AppState.State.EXPECT_RETURN) {
                     double returnThreshold = weightLimit * 0.9;
                     if (correctedWeight < returnThreshold) {
                         appState.setState(AppState.State.EXPECT_DATA);
-                        //tvStatus.setText("⏳ Ожидание превышения веса...");
-                        updateStatusForCurrentTarget();
+                        DataManager dataManager = DataManager.getInstance();
+                        if (dataManager.isCsvLoaded()) {
+                            updateStatusForCurrentTarget();
+                        } else {
+                            updateStatusWithoutCsv();
+                        }
                     }
                 }
 
@@ -1540,7 +1627,8 @@ public class MainActivity extends AppCompatActivity {
         }
 
         /**
-         * Обработка данных с использованием CSV таблицы
+         * Обработка данных с использованием CSV таблицы.
+         * Методика замера (вместо количества замеров) + взвешенное усреднение.
          */
         private void processWithCsvData(double correctedWeight, int correctedDistance, int rawDistance, DataModel dataModel, double weightLimit) {
             DataManager dataManager = DataManager.getInstance();
@@ -1550,7 +1638,6 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
 
-            // Проверяем, есть ли очередь
             if (measurementQueue.isEmpty()) {
                 buildMeasurementQueue();
                 if (measurementQueue.isEmpty()) {
@@ -1569,7 +1656,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            // Убеждаемся, что индексы совпадают с целевыми
             if (currentColumnIndex != target.col || currentRowIndex != target.row) {
                 currentColumnIndex = target.col;
                 currentRowIndex = target.row;
@@ -1600,26 +1686,22 @@ public class MainActivity extends AppCompatActivity {
             weightOverLimitBuffer.add(weightOverLimit);
             distanceBuffer.add(correctedDistance);
 
-            int measurementCount = appSettings.getMeasurementCount();
+            int methodCount = appSettings.getMeasurementCountForMethod();
+            double[] weights = appSettings.getWeightsForMethod();
 
-            if (weightOverLimitBuffer.size() >= measurementCount) {
+            if (weightOverLimitBuffer.size() >= methodCount) {
                 double avgWeightOverLimit = 0.0;
                 double avgDistance = 0.0;
-                for (Double w : weightOverLimitBuffer) {
-                    avgWeightOverLimit += w;
+                for (int i = 0; i < methodCount; i++) {
+                    double w = weights[i];
+                    avgWeightOverLimit += w * weightOverLimitBuffer.get(i);
+                    avgDistance += w * distanceBuffer.get(i);
                 }
-                for (Integer d : distanceBuffer) {
-                    avgDistance += d;
-                }
-                avgWeightOverLimit /= weightOverLimitBuffer.size();
-                avgDistance /= distanceBuffer.size();
 
                 double avgDiff = avgDistance - lastCsvValue;
 
                 String side = target.side;
 
-                // --- ЗВУК ДЛЯ ЗАПИСИ В ТАБЛИЦУ ---
-                // Воспроизводим звук записи (основной звук)
                 soundManager.playRecordSound();
 
                 addLimitDataRecord(
@@ -1637,8 +1719,8 @@ public class MainActivity extends AppCompatActivity {
                 String colLetter = getColumnLetter(target.col);
                 String index = colLetter.toLowerCase() + (target.row + 1) + side;
 
-                String statusMsg = String.format("✅ Записано (усреднено из %d замеров): %s, Diff: %.2f",
-                        measurementCount, index, avgDiff);
+                String statusMsg = String.format("✅ Записано (%s): %s, Diff: %.2f",
+                        getMeasurementMethodShortName(), index, avgDiff);
                 tvStatus.setText(statusMsg);
 
                 weightOverLimitBuffer.clear();
@@ -1655,12 +1737,75 @@ public class MainActivity extends AppCompatActivity {
                     String index = colLetter.toLowerCase() + (currentTarget.row + 1) + currentTarget.side;
 
                     String statusMsg = String.format("⏳ Замер %d из %d для стропы %s",
-                            weightOverLimitBuffer.size(), measurementCount, index);
+                            weightOverLimitBuffer.size(), methodCount, index);
                     tvStatus.setText(statusMsg);
                 }
 
-                // --- ЗВУК ДЛЯ ПЕРВОГО ЗАМЕРА ---
-                // Воспроизводим звук клика при каждом получении данных от датчика
+                soundManager.playClickSound();
+            }
+
+            dataModel.setRecorded(true);
+            appState.setDataRecordedForCycle(true);
+            appState.setState(AppState.State.EXPECT_RETURN);
+        }
+
+        /**
+         * Обработка данных БЕЗ CSV по методике замера.
+         * Накапливает N натяжений, взвешенно усредняет, пишет в таблицу.
+         * После финальной записи инкрементирует currentRowIndex (a1 → a2 → a3 → …).
+         * side игнорируется (всегда ""), lowerTierNumber = 0, targetWeight = 0, diff = 0.
+         */
+        private void processWithoutCsvData(double correctedWeight, int correctedDistance, int rawDistance, DataModel dataModel, double weightLimit) {
+            double weightOverLimit = correctedWeight - weightLimit;
+            weightOverLimitBuffer.add(weightOverLimit);
+            distanceBuffer.add(correctedDistance);
+
+            int methodCount = appSettings.getMeasurementCountForMethod();
+            double[] weights = appSettings.getWeightsForMethod();
+
+            String colLetter = getColumnLetter(currentColumnIndex);
+            String index = colLetter.toLowerCase() + (currentRowIndex + 1);
+
+            if (weightOverLimitBuffer.size() >= methodCount) {
+                // Взвешенное усреднение по методике (сумма весов = 1.0)
+                double avgWeightOverLimit = 0.0;
+                double avgDistance = 0.0;
+                for (int i = 0; i < methodCount; i++) {
+                    double w = weights[i];
+                    avgWeightOverLimit += w * weightOverLimitBuffer.get(i);
+                    avgDistance += w * distanceBuffer.get(i);
+                }
+
+                soundManager.playRecordSound();
+
+                addLimitDataRecord(
+                        correctedWeight,
+                        0.0,                     // targetWeight — нет CSV
+                        rawDistance,
+                        (int) Math.round(avgDistance),
+                        0.0,                     // diff — нет CSV, сравнивать не с чем
+                        weightLimit,
+                        0,                       // lowerTierNumber — нет CSV
+                        "",                      // side — без CSV игнорируется
+                        currentColumnIndex
+                );
+
+                String statusMsg = String.format("✅ Записано (%s): %s, Dist: %d",
+                        getMeasurementMethodShortName(), index, (int) Math.round(avgDistance));
+                tvStatus.setText(statusMsg);
+
+                weightOverLimitBuffer.clear();
+                distanceBuffer.clear();
+
+                // Без CSV переходим к следующей стропе: a1 → a2 → a3 → …
+                currentRowIndex++;
+
+                updateStatusWithoutCsv();
+            } else {
+                String statusMsg = String.format("⏳ Замер %d из %d для стропы %s",
+                        weightOverLimitBuffer.size(), methodCount, index);
+                tvStatus.setText(statusMsg);
+
                 soundManager.playClickSound();
             }
 
@@ -1669,6 +1814,46 @@ public class MainActivity extends AppCompatActivity {
             appState.setState(AppState.State.EXPECT_RETURN);
         }
     };
+
+    /**
+     * Обновляет статус для режима без CSV: показывает текущую стропу
+     * и прогресс по методике (если буфер уже частично накоплен).
+     */
+    private void updateStatusWithoutCsv() {
+        String colLetter = getColumnLetter(currentColumnIndex);
+        String index = colLetter.toLowerCase() + (currentRowIndex + 1);
+        int methodCount = appSettings.getMeasurementCountForMethod();
+        int current = weightOverLimitBuffer.size();
+
+        if (current > 0 && current < methodCount) {
+            tvStatus.setText(String.format("⏳ Замер %d из %d для стропы %s (ожидание превышения)",
+                    current, methodCount, index));
+        } else {
+            tvStatus.setText(String.format("⏳ %s - ожидание превышения (без CSV, %s)",
+                    index, getMeasurementMethodShortName()));
+        }
+    }
+
+    /**
+     * Короткое имя текущей методики для сообщений в статусе.
+     */
+    private String getMeasurementMethodShortName() {
+        String method = appSettings.getMeasurementMethod();
+        if (AppSettings.MEASUREMENT_METHOD_1.equals(method)) {
+            return "1 замер";
+        } else if (AppSettings.MEASUREMENT_METHOD_2.equals(method)) {
+            return "2 замера, среднее";
+        } else if (AppSettings.MEASUREMENT_METHOD_3.equals(method)) {
+            return "3 замера, среднее";
+        } else if (AppSettings.MEASUREMENT_METHOD_4.equals(method)) {
+            return "2 замера, 0.1 / 0.9";
+        } else if (AppSettings.MEASUREMENT_METHOD_5.equals(method)) {
+            return "3 замера, квадрат";
+        } else if (AppSettings.MEASUREMENT_METHOD_6.equals(method)) {
+            return "5 замеров, квадрат";
+        }
+        return "1 замер";
+    }
 
     private String getColumnLetter(int index) {
         StringBuilder sb = new StringBuilder();
@@ -1698,11 +1883,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * Ручной запуск сканирования по кнопке
-     */
     private void manualStartScan() {
-        // Если уже подключены — не сканируем
         if (isConnected) {
             Toast.makeText(this, "Уже подключено к устройству", Toast.LENGTH_SHORT).show();
             return;
@@ -1721,9 +1902,6 @@ public class MainActivity extends AppCompatActivity {
         disconnectDevice();
     }
 
-    /**
-     * Принудительно обновляет очередь измерений
-     */
     private void refreshMeasurementQueue() {
         DataManager dataManager = DataManager.getInstance();
         if (!dataManager.isCsvLoaded()) {
